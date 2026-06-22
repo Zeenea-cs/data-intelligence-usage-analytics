@@ -207,7 +207,8 @@ CARDS: list[dict[str, Any]] = [
         "sql": (
             "WITH edited AS ("
             " SELECT DISTINCT user_id, item_id FROM audit_events "
-            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL) "
+            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
+            " AND action = 'UpdateItem') "
             "SELECT COALESCE(i.owner_name, i.owner_email, i.owner_id) AS curator, "
             "ROUND(COUNT(e.item_id)::numeric / NULLIF(COUNT(*), 0), 3) AS coverage_ratio "
             "FROM items i "
@@ -225,7 +226,8 @@ CARDS: list[dict[str, Any]] = [
         "sql": (
             "WITH edited AS ("
             " SELECT DISTINCT user_id, item_id FROM audit_events "
-            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL) "
+            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
+            " AND action = 'UpdateItem') "
             "SELECT COALESCE(i.owner_name, i.owner_email, i.owner_id) AS curator, "
             "COUNT(*) AS managed_items, COUNT(e.item_id) AS edited_items, "
             "ROUND(COUNT(e.item_id)::numeric / NULLIF(COUNT(*), 0), 3) AS coverage_ratio "

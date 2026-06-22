@@ -1,0 +1,77 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-actian_companion}
+      POSTGRES_USER: ${POSTGRES_USER:-actian}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-actian} -d ${POSTGRES_DB:-actian_companion}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  collector:
+    build:
+      context: ./collector
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      WEBUI_PORT: ${WEBUI_PORT:-8000}
+      ACTIAN_INSTANCE_URL: ${ACTIAN_INSTANCE_URL}
+      ACTIAN_API_KEY: ${ACTIAN_API_KEY}
+      COLLECT_CRON: ${COLLECT_CRON:-0 0 * * *}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-actian_companion}
+      POSTGRES_USER: ${POSTGRES_USER:-actian}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      METABASE_DB_PASSWORD: ${METABASE_DB_PASSWORD:?METABASE_DB_PASSWORD is required}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+  metabase-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metabase
+      POSTGRES_USER: metabase
+      POSTGRES_PASSWORD: ${METABASE_DB_PASSWORD:?METABASE_DB_PASSWORD is required}
+    volumes:
+      - metabase_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metabase -d metabase"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  metabase:
+    image: metabase/metabase:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      metabase-db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase
+      MB_DB_PASS: ${METABASE_DB_PASSWORD:?METABASE_DB_PASSWORD is required}
+      MB_DB_HOST: metabase-db
+
+volumes:
+  db_data:
+  metabase_db_data:

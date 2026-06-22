@@ -15,6 +15,9 @@ env/
 *.egg-info/
 .mypy_cache/
 
+# Shared runtime logs (written by the services; not source)
+logs/
+
 # OS / editor
 .DS_Store
 .idea/

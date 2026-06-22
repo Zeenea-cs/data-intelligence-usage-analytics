@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -82,3 +84,25 @@ def test_trigger_returns_202(monkeypatch: pytest.MonkeyPatch) -> None:
         resp = client.post("/api/collect")
         assert resp.status_code == 202
         assert resp.json()["detail"] == "Collection started"
+
+
+def test_log_viewer_endpoints(tmp_path: Path) -> None:
+    # Two service log files present; metabase/metabase-db absent.
+    (tmp_path / "collector.log").write_text("l1\nl2\nl3\n", encoding="utf-8")
+    (tmp_path / "db.log").write_text("db line\n", encoding="utf-8")
+    settings = replace(_SETTINGS, log_dir=str(tmp_path))
+    _engine, factory = _build()
+    app = create_app(settings, factory, asyncio.Lock())
+
+    with TestClient(app) as client:
+        services = client.get("/api/logs/services").json()
+        assert services == ["collector", "db"]  # only files that exist
+
+        # Tail returns the last N lines.
+        tail = client.get("/api/logs/collector?lines=2")
+        assert tail.status_code == 200
+        assert tail.text == "l2\nl3\n"
+
+        # Unknown / not-present service -> 404 (also blocks path traversal).
+        assert client.get("/api/logs/metabase").status_code == 404
+        assert client.get("/api/logs/..%2f..%2fetc%2fpasswd").status_code == 404

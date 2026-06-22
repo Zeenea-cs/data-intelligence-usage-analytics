@@ -20,6 +20,7 @@ import uvicorn
 
 from app.config import Settings, load_settings
 from app.database import create_db_engine, create_schema, create_session_factory
+from app.logsetup import configure_logging
 from app.scheduler import build_scheduler, run_collection
 from app.webui import create_app
 
@@ -69,10 +70,7 @@ async def _serve(settings: Settings) -> None:
 def main() -> None:
     """Load config, configure logging, and run the async service."""
     settings = load_settings()
-    logging.basicConfig(
-        level=settings.log_level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging(settings)
     asyncio.run(_serve(settings))
 
 

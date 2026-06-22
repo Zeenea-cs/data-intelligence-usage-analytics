@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 380" font-family="system-ui,Segoe UI,Arial,sans-serif">
+  <rect x="0" y="0" width="640" height="380" rx="8" fill="#ffffff" stroke="#e1e4e8"/>
+  <text x="16" y="28" font-size="16" font-weight="700" fill="#24292f">Actian Data Intelligence Activity</text>
+  <text x="556" y="28" font-size="11" fill="#8b949e">illustrative</text>
+
+  <!-- KPI cards -->
+  <g>
+    <rect x="16" y="44" width="194" height="70" rx="6" fill="#f6f8fa" stroke="#e1e4e8"/>
+    <text x="28" y="70" font-size="11" fill="#57606a">Users</text>
+    <text x="28" y="100" font-size="26" font-weight="700" fill="#1f6feb">42</text>
+
+    <rect x="223" y="44" width="194" height="70" rx="6" fill="#f6f8fa" stroke="#e1e4e8"/>
+    <text x="235" y="70" font-size="11" fill="#57606a">Audit events</text>
+    <text x="235" y="100" font-size="26" font-weight="700" fill="#1f6feb">6.1k</text>
+
+    <rect x="430" y="44" width="194" height="70" rx="6" fill="#f6f8fa" stroke="#e1e4e8"/>
+    <text x="442" y="70" font-size="11" fill="#57606a">Curated items</text>
+    <text x="442" y="100" font-size="26" font-weight="700" fill="#1f6feb">980</text>
+  </g>
+
+  <!-- Weekly pace line chart -->
+  <rect x="16" y="128" width="300" height="232" rx="6" fill="#ffffff" stroke="#e1e4e8"/>
+  <text x="28" y="152" font-size="13" font-weight="600" fill="#24292f">Weekly Documentation Pace</text>
+  <line x1="40" y1="330" x2="300" y2="330" stroke="#e1e4e8"/>
+  <line x1="40" y1="170" x2="40" y2="330" stroke="#e1e4e8"/>
+  <polyline points="48,300 96,288 144,250 192,260 240,205 288,178" fill="none" stroke="#1f6feb" stroke-width="2.5"/>
+  <g fill="#1f6feb">
+    <circle cx="48" cy="300" r="3"/><circle cx="96" cy="288" r="3"/><circle cx="144" cy="250" r="3"/>
+    <circle cx="192" cy="260" r="3"/><circle cx="240" cy="205" r="3"/><circle cx="288" cy="178" r="3"/>
+  </g>
+  <text x="40" y="350" font-size="10" fill="#8b949e">W1</text>
+  <text x="280" y="350" font-size="10" fill="#8b949e">W6</text>
+
+  <!-- Top modified items -->
+  <rect x="328" y="128" width="296" height="232" rx="6" fill="#ffffff" stroke="#e1e4e8"/>
+  <text x="340" y="152" font-size="13" font-weight="600" fill="#24292f">Top Modified Items</text>
+  <g font-size="11" fill="#57606a">
+    <text x="340" y="184">customer_master</text>
+    <rect x="340" y="190" width="270" height="12" rx="3" fill="#eaeef2"/>
+    <rect x="340" y="190" width="270" height="12" rx="3" fill="#8250df"/>
+    <text x="340" y="220">orders_fact</text>
+    <rect x="340" y="226" width="270" height="12" rx="3" fill="#eaeef2"/>
+    <rect x="340" y="226" width="208" height="12" rx="3" fill="#8250df"/>
+    <text x="340" y="256">product_dim</text>
+    <rect x="340" y="262" width="270" height="12" rx="3" fill="#eaeef2"/>
+    <rect x="340" y="262" width="156" height="12" rx="3" fill="#8250df"/>
+    <text x="340" y="292">revenue_report</text>
+    <rect x="340" y="298" width="270" height="12" rx="3" fill="#eaeef2"/>
+    <rect x="340" y="298" width="120" height="12" rx="3" fill="#8250df"/>
+    <text x="340" y="328">data_glossary</text>
+    <rect x="340" y="334" width="270" height="12" rx="3" fill="#eaeef2"/>
+    <rect x="340" y="334" width="74" height="12" rx="3" fill="#8250df"/>
+  </g>
+</svg>

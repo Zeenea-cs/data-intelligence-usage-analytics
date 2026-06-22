@@ -27,6 +27,8 @@ DEFAULT_POSTGRES_PORT = 5432
 DEFAULT_POSTGRES_DB = "actian_companion"
 DEFAULT_POSTGRES_USER = "actian"
 DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_WEBUI_HOST = "0.0.0.0"
+DEFAULT_WEBUI_PORT = 8000
 
 
 @dataclass(frozen=True)
@@ -46,13 +48,16 @@ class Settings:
     postgres_password: str
     metabase_db_password: str
     log_level: str
+    # Web UI bind address/port (fields with defaults come last).
+    webui_host: str = DEFAULT_WEBUI_HOST
+    webui_port: int = DEFAULT_WEBUI_PORT
 
     @property
     def database_url(self) -> str:
         """Return the SQLAlchemy connection URL for the companion database.
 
-        Uses the ``postgresql+psycopg`` dialect, which psycopg 3 serves for both
-        synchronous (Alembic) and asynchronous (collectors) engines.
+        Uses the ``postgresql+psycopg`` dialect (psycopg 3), driving the async
+        engine used by the collectors.
         """
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
@@ -80,13 +85,8 @@ def load_settings() -> Settings:
             "(see .env.example)."
         )
 
-    port_raw = os.environ.get("POSTGRES_PORT", str(DEFAULT_POSTGRES_PORT))
-    try:
-        postgres_port = int(port_raw)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"POSTGRES_PORT must be an integer, got {port_raw!r}."
-        ) from exc
+    postgres_port = _int_env("POSTGRES_PORT", DEFAULT_POSTGRES_PORT)
+    webui_port = _int_env("WEBUI_PORT", DEFAULT_WEBUI_PORT)
 
     return Settings(
         actian_instance_url=os.environ["ACTIAN_INSTANCE_URL"].rstrip("/"),
@@ -99,4 +99,15 @@ def load_settings() -> Settings:
         postgres_password=os.environ["POSTGRES_PASSWORD"],
         metabase_db_password=os.environ["METABASE_DB_PASSWORD"],
         log_level=os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL),
+        webui_host=os.environ.get("WEBUI_HOST", DEFAULT_WEBUI_HOST),
+        webui_port=webui_port,
     )
+
+
+def _int_env(name: str, default: int) -> int:
+    """Read an integer env var, raising a clear error on a non-integer value."""
+    raw = os.environ.get(name, str(default))
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer, got {raw!r}.") from exc

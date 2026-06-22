@@ -1,8 +1,11 @@
-"""SQLAlchemy ORM models.
+"""SQLAlchemy ORM models -- the single source of truth for the schema.
 
-Mirror the target data model defined in CLAUDE.md: users, audit_events, items,
-and collection_runs. Schema changes are applied via Alembic migrations, never
-via metadata.create_all in production.
+Four tables: users, audit_events, items, collection_runs. This is a 1.0
+application with no deployment history, so the schema is created directly from
+this metadata at startup (see database.create_schema); there are no migrations.
+
+The JSONB / BigInteger columns use dialect variants so the same models build on
+PostgreSQL (production) and SQLite (tests).
 """
 
 from __future__ import annotations
@@ -31,12 +34,11 @@ class Base(DeclarativeBase):
 # TIMESTAMPTZ helper.
 _TZ = DateTime(timezone=True)
 
-# JSONB in PostgreSQL (production/migrations); plain JSON elsewhere (e.g. SQLite
-# under test). The Alembic migration owns the production DDL as JSONB.
+# JSONB on PostgreSQL (production); plain JSON on SQLite (tests).
 _JSONB = JSON().with_variant(JSONB(), "postgresql")
 
-# BIGSERIAL/identity in PostgreSQL; INTEGER rowid (autoincrement) on SQLite so
-# surrogate PKs are generated under test. Production DDL is owned by Alembic.
+# BIGSERIAL/identity on PostgreSQL; INTEGER rowid (autoincrement) on SQLite, so
+# surrogate primary keys are generated under both.
 _BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
 
 

@@ -32,6 +32,20 @@ def create_db_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
     return create_async_engine(database_url, echo=echo, pool_pre_ping=True)
 
 
+async def create_schema(engine: AsyncEngine) -> None:
+    """Create all tables from the ORM metadata if they do not exist.
+
+    This is a 1.0 application with no deployment history, so the schema is built
+    directly from the models at startup -- there are no migrations. ``create_all``
+    is idempotent (it skips tables that already exist).
+    """
+    # Imported here to avoid a circular import (models imports nothing from here).
+    from app.models import Base
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     """Return an ``async_sessionmaker`` bound to the given engine."""
     return async_sessionmaker(bind=engine, expire_on_commit=False)

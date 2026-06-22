@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.audit import AuditClient
 from app.api.catalog import CatalogClient
 from app.api.users import UsersClient
+from app.clients import build_clients
 from app.collectors.audit import collect_audit_events
 from app.collectors.items import collect_items
 from app.collectors.users import collect_users
@@ -104,16 +105,17 @@ async def run_collection(
     (web-triggered) run and the scheduled run never overlap. Returns the run
     status.
     """
-    base, key = settings.actian_instance_url, settings.actian_api_key
+    clients = build_clients(settings)
 
     async def _go() -> str:
         return await execute_collection(
             session_factory,
-            users_client=UsersClient(base, key),
-            audit_client=AuditClient(base, key),
-            catalog_client=CatalogClient(base, key),
+            users_client=clients.users,
+            audit_client=clients.audit,
+            catalog_client=clients.catalog,
         )
 
+    # The optional lock serialises manual (web) and scheduled runs.
     if lock is None:
         return await _go()
     async with lock:

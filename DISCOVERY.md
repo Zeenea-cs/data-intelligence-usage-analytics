@@ -306,7 +306,7 @@ ItemDescription { content: Text, summary: LongText, lifecycle: DescriptionLifecy
 Implementing object types: `Dataset`, `Field`, `GenericItem`, `SemanticItem`
 (all expose the `Item` interface fields).
 
-### Field mapping → `items` (implemented; migration 002 added columns)
+### Field mapping → `items` (implemented)
 | `items` column | Catalog field | Note |
 |---|---|---|
 | `id` | `id` | PK / upsert key (the audit `item_id` UUID) |

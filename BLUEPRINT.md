@@ -22,7 +22,8 @@ demand. Everything runs via Docker Compose.
 
 - Collector: **Python 3.12**, **APScheduler** (cron), **httpx** (async HTTP).
 - Database: **PostgreSQL 16**.
-- ORM / migrations: **SQLAlchemy 2.x (async)** + **Alembic**.
+- ORM: **SQLAlchemy 2.x (async)**. No migration tool — this is a 1.0 with no
+  deployment history, so the schema is created from the ORM metadata at startup.
 - Web UI: **FastAPI** + **uvicorn**, served by the collector process in the same
   asyncio event loop as the scheduler.
 - Reporting: **Metabase** (latest stable Docker image).
@@ -34,7 +35,7 @@ demand. Everything runs via Docker Compose.
   module constants in their client).
 - Runtime deps also include **greenlet** (SQLAlchemy async) and
   **psycopg[binary]** (Postgres driver; the `postgresql+psycopg` dialect serves
-  both sync Alembic and async collectors).
+  the async collectors).
 
 ---
 
@@ -45,12 +46,14 @@ actian-companion/
   collector/
     app/
       __init__.py
-      config.py            # env load + validation
-      database.py          # async engine, session factory, upsert helper
-      models.py            # SQLAlchemy models
-      timeutils.py         # ISO-8601 parsing (handles Z + nanoseconds)
+      config.py            # env load + validation (incl. web UI host/port)
+      database.py          # async engine, session factory, schema create, upsert helper
+      models.py            # SQLAlchemy models (the schema's single source of truth)
+      timeutils.py         # ISO-8601 parse + format (handles Z + nanoseconds)
+      clients.py           # factory bundling the three API clients from Settings
       api/
         __init__.py        # ApiError
+        _http.py           # shared headers, request/GraphQL helpers, error wrapping
         audit.py           # Audit REST client
         catalog.py         # Catalog GraphQL client
         users.py           # User Management (GraphQL) + SCIM (REST) client
@@ -61,17 +64,11 @@ actian-companion/
         items.py
       scheduler.py         # AsyncIOScheduler + collection cycle + run record
       webui.py             # FastAPI trigger UI
-      main.py              # entrypoint: migrate -> scheduler + uvicorn
-    migrations/
-      env.py
-      versions/
-        001_initial_schema.py
-        002_items_catalog_fields.py
+      main.py              # entrypoint: create schema -> scheduler + uvicorn
     tests/
       test_config.py  test_models.py  test_api_clients.py
       test_collectors.py  test_scheduler.py  test_items.py  test_webui.py
     requirements.txt
-    alembic.ini
     Dockerfile
   scripts/
     discover_api.py        # interactive API discovery tool
@@ -115,9 +112,10 @@ Setup-script-only vars (used by `scripts/setup_metabase.py`, all optional):
 
 ---
 
-## 4. Data model (PostgreSQL, owned by Alembic)
+## 4. Data model (PostgreSQL)
 
-Never use `CREATE TABLE IF NOT EXISTS`; all DDL via Alembic. JSONB columns in
+The ORM models are the single source of truth; the schema is created from them
+at startup via `Base.metadata.create_all` (1.0 — no migrations). JSONB columns in
 Postgres (use `JSON().with_variant(JSONB, "postgresql")` in models so tests can
 run on SQLite). BIGSERIAL PKs (`BigInteger().with_variant(Integer, "sqlite")`).
 All timestamps `TIMESTAMPTZ` (`DateTime(timezone=True)`).
@@ -133,8 +131,6 @@ All timestamps `TIMESTAMPTZ` (`DateTime(timezone=True)`).
 **items**: `id VARCHAR PK`, `key VARCHAR(512)`, `item_type`, `name`,
 `description TEXT`, `description_type VARCHAR(50)`, `owner_id`, `owner_name`,
 `owner_email`, `attributes JSONB`, `first_seen_at`, `last_updated_at`.
-(Migration 001 creates the base columns; migration 002 adds `key`,
-`description_type`, `owner_name`, `owner_email`.)
 
 **collection_runs**: `id BIGSERIAL PK`, `started_at`, `finished_at`,
 `status VARCHAR(50)`, `users_collected INT`, `events_collected INT`,
@@ -294,14 +290,13 @@ transaction. Run order each cycle: **users → audit → items**.
     cron job from `COLLECT_CRON` (`CronTrigger.from_crontab`), `coalesce=True`,
     `max_instances=1`.
 - `main.py`:
-  - `run_migrations(settings)`: Alembic `upgrade head` (inject
-    `settings.database_url` into `alembic.ini`).
-  - `_serve(settings)`: create engine + session factory + a shared
-    `asyncio.Lock`; build scheduler; add an **immediate one-off job** (runs once
-    at startup so the DB is not empty); start scheduler; run the FastAPI app via
+  - `_serve(settings)`: create engine; `create_schema(engine)` (build tables
+    from ORM metadata); create session factory + a shared `asyncio.Lock`; build
+    scheduler; add an **immediate one-off job** (runs once at startup so the DB
+    is not empty); start scheduler; run the FastAPI app via
     `uvicorn.Server(...).serve()` on `WEBUI_HOST:WEBUI_PORT`, which blocks.
-  - `main()`: load settings → configure logging → run migrations → `asyncio.run`.
-- `migrations/env.py` targets `Base.metadata`, online + offline modes, NullPool.
+  - `main()`: load settings → configure logging → `asyncio.run(_serve)`.
+- `database.create_schema(engine)` runs `Base.metadata.create_all` (idempotent).
 
 ---
 

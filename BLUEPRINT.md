@@ -353,11 +353,16 @@ Dockerfile: `python:3.12-slim`, install `requirements.txt`, copy app,
 ## 10. Metabase provisioning (`scripts/setup_metabase.py`)
 
 Idempotent. Steps: poll `/api/health`; complete the setup wizard if
-`has-user-setup` is false (else log in); add a postgres database connection to
-`actian_companion` (pointing at the `db` service); create saved questions
-(cards) by name (skip if present); build dashboards via `PUT /api/dashboard/:id`
-with a `dashcards` layout (Metabase v0.62 shape). Branch on `has-user-setup`
-(not the setup token, which persists after setup).
+`has-user-setup` is false (else log in); **remove the default example assets**
+(Sample Database, the *E-commerce Insights* dashboard, the *Examples*
+collection); add a postgres database connection to `actian_companion` (the `db`
+service); create-or-update saved questions (cards) by name (PUT so SQL changes
+propagate); build dashboards via `PUT /api/dashboard/:id` with a `dashcards`
+layout (Metabase v0.62 shape). Branch on `has-user-setup` (not the setup token,
+which persists after setup).
+
+All audit-based card SQL filters `user_id IS NOT NULL` so events not linked to a
+known user are excluded from the statistics.
 
 Create at least these cards and five example dashboards:
 - **Activity** — Top Contributors (30d), Top Modified Items (30d), Weekly

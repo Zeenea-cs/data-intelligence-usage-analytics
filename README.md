@@ -110,8 +110,12 @@ Open <http://localhost:3000>.
 
 `scripts/setup_metabase.py` provisions Metabase end to end and is **idempotent**
 (safe to re-run): it completes the setup wizard on first run, logs in on later
-runs, connects the `actian_companion` database, and (re)builds the example
-cards and dashboards.
+runs, **removes Metabase's default example assets** (Sample Database, the
+*E-commerce Insights* dashboard and the *Examples* collection), connects the
+`actian_companion` database, and (re)builds the application cards and dashboards.
+
+> All audit-based statistics **exclude events not linked to a user** (rows with
+> no `user_id`); only known users are counted.
 
 Default admin login (override via `.env` — see §3):
 

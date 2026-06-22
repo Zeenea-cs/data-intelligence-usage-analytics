@@ -39,9 +39,10 @@ CARDS: list[dict[str, Any]] = [
         "name": "Top Contributors (last 30 days)",
         "display": "row",
         "sql": (
-            "SELECT COALESCE(username, user_id, '(unknown)') AS contributor, "
+            "SELECT COALESCE(username, user_id) AS contributor, "
             "COUNT(*) AS edits FROM audit_events "
-            "WHERE occurred_at >= NOW() - INTERVAL '30 days' "
+            "WHERE user_id IS NOT NULL "
+            "AND occurred_at >= NOW() - INTERVAL '30 days' "
             "GROUP BY 1 ORDER BY edits DESC LIMIT 20"
         ),
         "viz": {"graph.dimensions": ["contributor"], "graph.metrics": ["edits"]},
@@ -52,7 +53,9 @@ CARDS: list[dict[str, Any]] = [
         "display": "table",
         "sql": (
             "SELECT item_name, item_type, COUNT(*) AS modifications "
-            "FROM audit_events WHERE occurred_at >= NOW() - INTERVAL '30 days' "
+            "FROM audit_events "
+            "WHERE user_id IS NOT NULL "
+            "AND occurred_at >= NOW() - INTERVAL '30 days' "
             "GROUP BY item_name, item_type ORDER BY modifications DESC LIMIT 20"
         ),
         "viz": {},
@@ -63,7 +66,8 @@ CARDS: list[dict[str, Any]] = [
         "display": "line",
         "sql": (
             "SELECT DATE_TRUNC('week', occurred_at) AS week, COUNT(*) AS events "
-            "FROM audit_events GROUP BY week ORDER BY week"
+            "FROM audit_events WHERE user_id IS NOT NULL "
+            "GROUP BY week ORDER BY week"
         ),
         "viz": {"graph.dimensions": ["week"], "graph.metrics": ["events"]},
     },
@@ -73,7 +77,7 @@ CARDS: list[dict[str, Any]] = [
         "display": "bar",
         "sql": (
             "SELECT action, COUNT(*) AS events FROM audit_events "
-            "GROUP BY action ORDER BY events DESC"
+            "WHERE user_id IS NOT NULL GROUP BY action ORDER BY events DESC"
         ),
         "viz": {"graph.dimensions": ["action"], "graph.metrics": ["events"]},
     },
@@ -83,7 +87,8 @@ CARDS: list[dict[str, Any]] = [
         "display": "line",
         "sql": (
             "SELECT DATE_TRUNC('day', occurred_at) AS day, COUNT(*) AS events "
-            "FROM audit_events WHERE occurred_at >= NOW() - INTERVAL '30 days' "
+            "FROM audit_events WHERE user_id IS NOT NULL "
+            "AND occurred_at >= NOW() - INTERVAL '30 days' "
             "GROUP BY day ORDER BY day"
         ),
         "viz": {"graph.dimensions": ["day"], "graph.metrics": ["events"]},
@@ -164,7 +169,7 @@ CARDS: list[dict[str, Any]] = [
         "display": "row",
         "sql": (
             "SELECT COALESCE(item_name, item_id) AS item, COUNT(*) AS modifications "
-            "FROM audit_events WHERE item_id IS NOT NULL "
+            "FROM audit_events WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
             "GROUP BY item_id, item_name ORDER BY modifications DESC LIMIT 10"
         ),
         "viz": {"graph.dimensions": ["item"], "graph.metrics": ["modifications"]},
@@ -176,7 +181,7 @@ CARDS: list[dict[str, Any]] = [
         "sql": (
             "SELECT COALESCE(item_name, item_id) AS item, item_type, "
             "COUNT(*) AS modifications, MAX(occurred_at) AS last_modified "
-            "FROM audit_events WHERE item_id IS NOT NULL "
+            "FROM audit_events WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
             "GROUP BY item_id, item_name, item_type "
             "ORDER BY modifications DESC LIMIT 25"
         ),
@@ -329,6 +334,36 @@ def complete_setup_wizard(client: httpx.Client, *, email: str, password: str, si
     return resp.json()["id"]
 
 
+# Metabase's default example assets (removed so only app content remains).
+EXAMPLE_DASHBOARD_NAMES = {"E-commerce Insights"}
+EXAMPLE_COLLECTION_NAMES = {"Examples"}
+
+
+def remove_example_content(client: httpx.Client) -> None:
+    """Remove Metabase's built-in example assets, leaving only app content.
+
+    Deletes the Sample Database and archives the default example dashboard and
+    the "Examples" collection (which archives the sample questions inside it).
+    Idempotent -- skips anything already absent/archived.
+    """
+    databases = client.get("/api/database").json()
+    databases = databases["data"] if isinstance(databases, dict) else databases
+    for db in databases:
+        if db.get("is_sample") or db.get("name") == "Sample Database":
+            client.delete(f"/api/database/{db['id']}").raise_for_status()
+            logger.info("Removed sample database (id=%s)", db["id"])
+
+    for dash in client.get("/api/dashboard").json():
+        if dash.get("name") in EXAMPLE_DASHBOARD_NAMES and not dash.get("archived"):
+            client.put(f"/api/dashboard/{dash['id']}", json={"archived": True}).raise_for_status()
+            logger.info("Archived example dashboard: %s", dash["name"])
+
+    for coll in client.get("/api/collection").json():
+        if coll.get("name") in EXAMPLE_COLLECTION_NAMES and isinstance(coll.get("id"), int):
+            client.put(f"/api/collection/{coll['id']}", json={"archived": True}).raise_for_status()
+            logger.info("Archived example collection: %s", coll["name"])
+
+
 def add_database_connection(client: httpx.Client) -> int:
     """Add (or find) the actian_companion database connection. Return its id."""
     existing = client.get("/api/database").json()
@@ -361,30 +396,35 @@ def add_database_connection(client: httpx.Client) -> int:
 
 
 def create_cards(client: httpx.Client, database_id: int) -> dict[str, int]:
-    """Create the saved questions (idempotent by name). Return key -> card id."""
+    """Create or update the saved questions (idempotent by name).
+
+    Existing cards are updated (PUT) so SQL/display changes propagate on re-run
+    while keeping the same card id (dashboards reference it). Returns key -> id.
+    """
     existing = {c["name"]: c["id"] for c in client.get("/api/card").json()}
     key_to_id: dict[str, int] = {}
     for card in CARDS:
-        if card["name"] in existing:
-            logger.info("Card exists: %s", card["name"])
-            key_to_id[card["key"]] = existing[card["name"]]
-            continue
-        resp = client.post(
-            "/api/card",
-            json={
-                "name": card["name"],
-                "dataset_query": {
-                    "type": "native",
-                    "native": {"query": card["sql"]},
-                    "database": database_id,
-                },
-                "display": card["display"],
-                "visualization_settings": card["viz"],
+        body = {
+            "name": card["name"],
+            "dataset_query": {
+                "type": "native",
+                "native": {"query": card["sql"]},
+                "database": database_id,
             },
-        )
-        resp.raise_for_status()
-        key_to_id[card["key"]] = resp.json()["id"]
-        logger.info("Created card: %s", card["name"])
+            "display": card["display"],
+            "visualization_settings": card["viz"],
+        }
+        if card["name"] in existing:
+            card_id = existing[card["name"]]
+            resp = client.put(f"/api/card/{card_id}", json=body)
+            resp.raise_for_status()
+            logger.info("Updated card: %s", card["name"])
+        else:
+            resp = client.post("/api/card", json=body)
+            resp.raise_for_status()
+            card_id = resp.json()["id"]
+            logger.info("Created card: %s", card["name"])
+        key_to_id[card["key"]] = card_id
     return key_to_id
 
 
@@ -439,6 +479,7 @@ def main() -> None:
         )
         client.headers["X-Metabase-Session"] = session
 
+        remove_example_content(client)
         database_id = add_database_connection(client)
         card_ids = create_cards(client, database_id)
         for spec in DASHBOARDS:

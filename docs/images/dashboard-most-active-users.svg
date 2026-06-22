@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 320" font-family="system-ui,Segoe UI,Arial,sans-serif">
+  <rect x="0" y="0" width="640" height="320" rx="8" fill="#ffffff" stroke="#e1e4e8"/>
+  <rect x="0" y="0" width="640" height="40" rx="8" fill="#f6f8fa"/>
+  <rect x="0" y="32" width="640" height="8" fill="#f6f8fa"/>
+  <text x="16" y="26" font-size="15" font-weight="700" fill="#24292f">Most Active Users (last 30 days)</text>
+  <text x="556" y="26" font-size="11" fill="#8b949e">illustrative</text>
+
+  <!-- bars: label, track, value -->
+  <g font-size="12" fill="#57606a">
+    <text x="16" y="74">Avery Quinn</text>
+    <rect x="150" y="64" width="430" height="14" rx="3" fill="#eaeef2"/>
+    <rect x="150" y="64" width="430" height="14" rx="3" fill="#1f6feb"/>
+    <text x="588" y="74" fill="#24292f" font-weight="600">312</text>
+
+    <text x="16" y="112">Jordan Lee</text>
+    <rect x="150" y="102" width="430" height="14" rx="3" fill="#eaeef2"/>
+    <rect x="150" y="102" width="369" height="14" rx="3" fill="#1f6feb"/>
+    <text x="588" y="112" fill="#24292f" font-weight="600">268</text>
+
+    <text x="16" y="150">Sam Rivera</text>
+    <rect x="150" y="140" width="430" height="14" rx="3" fill="#eaeef2"/>
+    <rect x="150" y="140" width="283" height="14" rx="3" fill="#1f6feb"/>
+    <text x="588" y="150" fill="#24292f" font-weight="600">205</text>
+
+    <text x="16" y="188">Taylor Kim</text>
+    <rect x="150" y="178" width="430" height="14" rx="3" fill="#eaeef2"/>
+    <rect x="150" y="178" width="212" height="14" rx="3" fill="#1f6feb"/>
+    <text x="588" y="188" fill="#24292f" font-weight="600">154</text>
+
+    <text x="16" y="226">Morgan Diaz</text>
+    <rect x="150" y="216" width="430" height="14" rx="3" fill="#eaeef2"/>
+    <rect x="150" y="216" width="135" height="14" rx="3" fill="#1f6feb"/>
+    <text x="588" y="226" fill="#24292f" font-weight="600">98</text>
+
+    <text x="16" y="264">Riley Fox</text>
+    <rect x="150" y="254" width="430" height="14" rx="3" fill="#eaeef2"/>
+    <rect x="150" y="254" width="65" height="14" rx="3" fill="#1f6feb"/>
+    <text x="588" y="264" fill="#24292f" font-weight="600">47</text>
+  </g>
+  <text x="16" y="300" font-size="11" fill="#8b949e">Edits per user from the audit trail · events not linked to a user are excluded</text>
+</svg>

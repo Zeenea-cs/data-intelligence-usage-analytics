@@ -26,6 +26,89 @@ authors accept no liability for any use of this code or its outputs.
 
 ---
 
+## Architecture
+
+### Components
+
+```mermaid
+flowchart LR
+  subgraph Actian["Actian Data Intelligence (Zeenea)"]
+    AUDIT["Audit API<br/>(REST)"]
+    UM["User Mgmt API<br/>(GraphQL export)"]
+    SCIM["SCIM API<br/>(REST, Bearer)"]
+    CAT["Catalog API<br/>(GraphQL)"]
+  end
+
+  subgraph Collector["collector (Python)"]
+    CLIENTS["API clients<br/>audit / users / catalog"]
+    COLL["collectors<br/>users - audit - items"]
+    SCHED["APScheduler<br/>(COLLECT_CRON + startup run)"]
+    WEB["FastAPI web UI<br/>:8000 (trigger + logs)"]
+  end
+
+  DB[("PostgreSQL<br/>actian_companion")]
+  MB["Metabase<br/>:3000 (dashboards)"]
+  LOGS[/"shared ./logs<br/>per-service files"/]
+
+  AUDIT & UM & SCIM & CAT --> CLIENTS --> COLL --> DB
+  SCHED --> COLL
+  WEB --> COLL
+  DB --> MB
+  COLL --> LOGS
+  MB --> LOGS
+  WEB -. tails .-> LOGS
+```
+
+### Collection cycle
+
+```mermaid
+sequenceDiagram
+  participant T as Scheduler / Web UI
+  participant R as run_collection (lock)
+  participant DB as PostgreSQL
+  T->>R: trigger (cron, startup, or POST /api/collect)
+  R->>DB: collect_users (export CSV + permission sets + SCIM) -> upsert users
+  R->>DB: collect_audit_events (Item events, cursor paging) -> upsert audit_events
+  R->>DB: collect_items (Catalog fetch per item) -> upsert items
+  R->>DB: write collection_runs row (success / partial / failed)
+```
+
+### Data model
+
+```mermaid
+erDiagram
+  users ||--o{ audit_events : "authors"
+  users {
+    string id PK
+    string email
+    bool is_steward
+    jsonb roles
+  }
+  audit_events {
+    bigint id PK
+    string event_id UK
+    string user_id FK
+    string item_id
+    timestamptz occurred_at
+  }
+  items {
+    string id PK
+    string key
+    string owner_id
+    string owner_email
+    timestamptz last_updated_at
+  }
+  collection_runs {
+    bigint id PK
+    string status
+    int users_collected
+    int events_collected
+    int items_collected
+  }
+```
+
+---
+
 ## 1. Prerequisites
 
 - **Docker** (Engine 24+)
@@ -148,6 +231,20 @@ The script creates **five example dashboards** for users to build on:
 - Per curator, a coverage ratio = *managed items the curator has edited* ÷
   *items the curator manages* (managed = the item's curator). Bar + detail table
   (managed / edited / ratio).
+
+### Example dashboards
+
+> The images below are **illustrative mock-ups with synthetic, anonymized data**
+> (not real catalog content) — your dashboards render live data from your
+> instance.
+
+<p>
+  <img src="docs/images/dashboard-activity-overview.svg" alt="Activity overview dashboard" width="100%">
+</p>
+<p>
+  <img src="docs/images/dashboard-most-active-users.svg" alt="Most Active Users report" width="49%">
+  <img src="docs/images/dashboard-coverage-per-curator.svg" alt="Documentation Coverage per Curator report" width="49%">
+</p>
 
 Re-run any time after a fresh collection to refresh:
 

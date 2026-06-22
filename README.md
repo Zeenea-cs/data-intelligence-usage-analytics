@@ -12,6 +12,20 @@ a collection on demand.
 
 ---
 
+## ⚠️ Disclaimer
+
+This software is provided **"as is", without warranty of any kind**, express or
+implied, including but not limited to the warranties of merchantability, fitness
+for a particular purpose, and non-infringement. Use it at your own risk.
+
+It is **not an official Actian product** and is **not affiliated with, endorsed
+by, or supported by Actian**. Its sole purpose is to **illustrate what can be
+built** on top of the Actian Data Intelligence Platform APIs — a demonstration,
+not a production-ready or maintained tool. **No support is provided**, and the
+authors accept no liability for any use of this code or its outputs.
+
+---
+
 ## 1. Prerequisites
 
 - **Docker** (Engine 24+)

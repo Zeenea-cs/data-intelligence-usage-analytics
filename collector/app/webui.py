@@ -12,6 +12,7 @@ Mounted by main.py alongside the AsyncIOScheduler in the same event loop.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 from typing import Any
 
@@ -50,6 +51,7 @@ _PAGE = """<!doctype html>
  select,input{font-size:.9rem;padding:.3rem}
 </style></head><body>
 <h1>Actian Data Intelligence Companion</h1>
+<p>Data Catalog instance: <code>__INSTANCE_URL__</code></p>
 <p>Trigger a data collection now, bypassing the cron schedule.</p>
 <button id="run" onclick="trigger()">Run collection now</button>
 <span id="msg"></span>
@@ -118,9 +120,12 @@ def create_app(
     app = FastAPI(title="Actian Companion")
     app.state.tasks = set()
 
+    # Render the configured instance URL into the static page once at build time.
+    page = _PAGE.replace("__INSTANCE_URL__", html.escape(settings.actian_instance_url))
+
     @app.get("/", response_class=HTMLResponse)
     async def index() -> str:
-        return _PAGE
+        return page
 
     @app.get("/api/runs")
     async def recent_runs() -> list[dict[str, Any]]:

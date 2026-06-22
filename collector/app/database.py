@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from itertools import islice
 from typing import Any
 
 from sqlalchemy import Table
@@ -20,6 +21,16 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+
+# Maximum bind parameters a single statement may carry, per backend. A multi-row
+# INSERT binds (rows * columns) parameters, so rows are chunked to stay under the
+# backend's ceiling. PostgreSQL's wire protocol caps at 65535; SQLite defaults to
+# 32766 (SQLITE_MAX_VARIABLE_NUMBER). Values are nudged below each hard limit for
+# safety margin.
+_MAX_BIND_PARAMS = {
+    "postgresql": 65000,
+    "sqlite": 32000,
+}
 
 
 def create_db_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
@@ -105,10 +116,20 @@ async def upsert_rows(
     else:
         raise RuntimeError(f"upsert_rows does not support dialect {dialect!r}")
 
-    stmt = insert(table).values(list(rows))
-    stmt = stmt.on_conflict_do_update(
-        index_elements=list(index_elements),
-        set_={col: getattr(stmt.excluded, col) for col in update_columns},
-    )
-    await session.execute(stmt)
-    return len(rows)
+    # A multi-row INSERT binds (rows * columns) parameters; chunk the rows so no
+    # single statement exceeds the backend's bind-parameter limit. Column count
+    # is taken from the widest row, since rows may omit defaulted keys.
+    columns_per_row = max(len(row) for row in rows) or 1
+    chunk_size = max(1, _MAX_BIND_PARAMS[dialect] // columns_per_row)
+
+    total = 0
+    rows_iter = iter(rows)
+    while chunk := list(islice(rows_iter, chunk_size)):
+        stmt = insert(table).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=list(index_elements),
+            set_={col: getattr(stmt.excluded, col) for col in update_columns},
+        )
+        await session.execute(stmt)
+        total += len(chunk)
+    return total

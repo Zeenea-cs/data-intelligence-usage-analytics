@@ -95,11 +95,13 @@ class CatalogClient:
 
             async def fetch_one(ref: str) -> None:
                 async with semaphore:
+                    # Include the item ref (key or UUID) in the label so any
+                    # Catalog error for this item names the offending item.
                     data = await graphql(
                         client,
                         CATALOG_PATH,
                         _SINGLE_ITEM_QUERY,
-                        label="Catalog API",
+                        label=f"Catalog API (item {ref})",
                         variables={"r": ref},
                         tolerated_error_code=ITEM_NOT_FOUND,
                     )

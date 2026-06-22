@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -110,6 +111,29 @@ def test_fetch_items_raises_on_real_graphql_error() -> None:
     client = CatalogClient(BASE, "k")
     with pytest.raises(ApiError):
         asyncio.run(client.fetch_items(["uuid-1"]))
+
+
+@respx.mock
+def test_fetch_items_logs_item_ref_on_error(caplog: pytest.LogCaptureFixture) -> None:
+    """An item-related Catalog error names the offending item (key/UUID)."""
+    respx.post(f"{BASE}/api/catalog/graphql").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": None,
+                "errors": [
+                    {
+                        "message": "not found",
+                        "extensions": {"code": "ITEM_NOT_FOUND", "value": "uuid-XYZ"},
+                    }
+                ],
+            },
+        )
+    )
+    client = CatalogClient(BASE, "secret-key")
+    with caplog.at_level(logging.INFO):
+        asyncio.run(client.fetch_items(["uuid-XYZ"]))
+    assert "uuid-XYZ" in caplog.text  # the item ref is in the log message
 
 
 # --------------------------------------------------------------------------- #

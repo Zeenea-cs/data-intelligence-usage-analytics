@@ -29,6 +29,11 @@ DEFAULT_POSTGRES_USER = "actian"
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_WEBUI_HOST = "0.0.0.0"
 DEFAULT_WEBUI_PORT = 8000
+# Shared directory (bind-mounted into every service) where each service writes
+# its log file; the web UI tails these files.
+DEFAULT_LOG_DIR = "/var/log/actian"
+DEFAULT_LOG_MAX_BYTES = 5_000_000  # rotate the collector log past ~5 MB
+DEFAULT_LOG_BACKUP_COUNT = 5  # keep this many rotated collector logs
 
 
 @dataclass(frozen=True)
@@ -51,6 +56,10 @@ class Settings:
     # Web UI bind address/port (fields with defaults come last).
     webui_host: str = DEFAULT_WEBUI_HOST
     webui_port: int = DEFAULT_WEBUI_PORT
+    # Logging: shared log directory + collector-log rotation settings.
+    log_dir: str = DEFAULT_LOG_DIR
+    log_max_bytes: int = DEFAULT_LOG_MAX_BYTES
+    log_backup_count: int = DEFAULT_LOG_BACKUP_COUNT
 
     @property
     def database_url(self) -> str:
@@ -101,6 +110,9 @@ def load_settings() -> Settings:
         log_level=os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL),
         webui_host=os.environ.get("WEBUI_HOST", DEFAULT_WEBUI_HOST),
         webui_port=webui_port,
+        log_dir=os.environ.get("LOG_DIR", DEFAULT_LOG_DIR),
+        log_max_bytes=_int_env("LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
+        log_backup_count=_int_env("LOG_BACKUP_COUNT", DEFAULT_LOG_BACKUP_COUNT),
     )
 
 

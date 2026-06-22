@@ -45,16 +45,20 @@ cp .env.example .env
 #    Edit .env and set the four REQUIRED values:
 #      ACTIAN_INSTANCE_URL, ACTIAN_API_KEY, POSTGRES_PASSWORD, METABASE_DB_PASSWORD
 
-# 2. Start the stack
+# 2. Prepare the shared log directory (all services write their logs here;
+#    open perms let the Postgres/Metabase container users write to it)
+mkdir -p logs && chmod 777 logs
+
+# 3. Start the stack
 docker compose up -d
 
-# 3. Wait for startup
+# 4. Wait for startup
 #    Postgres + collector come up in seconds; Metabase takes 1-2 minutes on first
 #    boot. Watch readiness:
 docker compose ps
 docker compose logs -f collector   # Ctrl-C to stop following
 
-# 4. Configure Metabase (database connection, saved questions, dashboards)
+# 5. Configure Metabase (database connection, saved questions, dashboards)
 #    The script needs two libraries on the host:
 pip install httpx python-dotenv
 python scripts/setup_metabase.py
@@ -84,6 +88,10 @@ All variables are read from `.env`. The four marked **required** have no default
 | `LOG_LEVEL` | Collector log level (`DEBUG`/`INFO`/`WARNING`/`ERROR`) | `INFO` |
 | `WEBUI_HOST` | Bind address for the trigger web UI | `0.0.0.0` |
 | `WEBUI_PORT` | Port for the trigger web UI (also mapped in compose) | `8000` |
+| `LOG_DIR` | In-container shared log directory (bind-mounted to `./logs`) | `/var/log/actian` |
+| `LOG_MAX_BYTES` | Collector log rotation size | `5000000` |
+| `LOG_BACKUP_COUNT` | Rotated collector logs to keep | `5` |
+| `POSTGRES_LOG_MIN_MESSAGES` | Postgres log verbosity (db / metabase-db) | `warning` |
 
 Used only by `scripts/setup_metabase.py` (all optional, with defaults):
 
@@ -170,10 +178,22 @@ The collector serves a small web UI at <http://localhost:8000>:
 - The trigger shares a lock with the scheduler, so manual and cron runs never
   overlap (a second trigger while one is running returns *already running*).
 
+- A **per-service log viewer**: pick a service (collector, db, metabase,
+  metabase-db) and tail the last N lines of its log on demand (optional
+  auto-refresh).
+
 ```
-POST http://localhost:8000/api/collect   # 202 started, or 409 if already running
-GET  http://localhost:8000/api/runs       # recent collection_runs as JSON
+POST http://localhost:8000/api/collect    # 202 started, or 409 if already running
+GET  http://localhost:8000/api/runs        # recent collection_runs as JSON
+GET  http://localhost:8000/api/logs/services        # services with a log file
+GET  http://localhost:8000/api/logs/{service}?lines=200   # tail a service log
 ```
+
+Each service writes its log into the shared `./logs` directory (bind-mounted
+into every container); the collector tails those files. Verbosity is `LOG_LEVEL`
+(collector + Metabase) / `POSTGRES_LOG_MIN_MESSAGES` (databases); the collector
+log rotates by size (`LOG_MAX_BYTES` × `LOG_BACKUP_COUNT`), the Postgres logs
+truncate daily.
 
 ### Alternatives
 

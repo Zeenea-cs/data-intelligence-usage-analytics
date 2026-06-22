@@ -1,9 +1,12 @@
-"""Lightweight web UI to trigger a collection run on demand.
+"""Lightweight web UI for the collector.
 
-A single page with a "Run collection now" button plus a table of recent runs.
-The trigger shares the collection lock with the scheduler, so a manual run and
-the cron run never overlap. Mounted by main.py alongside the AsyncIOScheduler in
-the same event loop.
+Features:
+* a "Run collection now" button to trigger a cycle on demand (shares the
+  collection lock with the scheduler, so manual and cron runs never overlap);
+* a table of recent collection runs;
+* a per-service log viewer that tails each service's log file on demand.
+
+Mounted by main.py alongside the AsyncIOScheduler in the same event loop.
 """
 
 from __future__ import annotations
@@ -13,11 +16,12 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.logs import available_services, tail_log
 from app.models import CollectionRun
 from app.scheduler import run_collection
 
@@ -39,6 +43,11 @@ _PAGE = """<!doctype html>
  .s-partial{color:#9a6700;font-weight:600}
  .s-failed{color:#cf222e;font-weight:600}
  #msg{margin-left:1rem;color:#555}
+ h2{font-size:1.1rem;margin-top:2rem}
+ #logbox{background:#0d1117;color:#d1d5da;padding:.8rem;border-radius:6px;
+   font-family:ui-monospace,monospace;font-size:.8rem;white-space:pre-wrap;
+   overflow:auto;max-height:420px;margin-top:.6rem}
+ select,input{font-size:.9rem;padding:.3rem}
 </style></head><body>
 <h1>Actian Data Intelligence Companion</h1>
 <p>Trigger a data collection now, bypassing the cron schedule.</p>
@@ -48,6 +57,14 @@ _PAGE = """<!doctype html>
  <th>Started</th><th>Finished</th><th>Status</th>
  <th>Users</th><th>Events</th><th>Items</th><th>Error</th>
 </tr></thead><tbody></tbody></table>
+
+<h2>Service logs</h2>
+<label>Service <select id="svc"></select></label>
+<label>Lines <input id="lines" type="number" value="200" min="1" max="2000" style="width:6rem"></label>
+<button onclick="loadLogs()">Load logs</button>
+<label style="margin-left:1rem"><input id="auto" type="checkbox"> auto-refresh</label>
+<div id="logbox">Select a service and click "Load logs".</div>
+
 <script>
 async function refresh(){
  const r = await fetch('api/runs'); const rows = await r.json();
@@ -69,7 +86,25 @@ async function trigger(){
    : (j.detail||'Already running');
  setTimeout(async()=>{await refresh(); btn.disabled=false; msg.textContent='';}, 4000);
 }
-refresh(); setInterval(refresh, 5000);
+async function loadServices(){
+ const svc=document.getElementById('svc');
+ const names=await (await fetch('api/logs/services')).json();
+ svc.innerHTML = names.length
+   ? names.map(n=>`<option value="${n}">${n}</option>`).join('')
+   : '<option value="">(no logs available)</option>';
+}
+async function loadLogs(){
+ const svc=document.getElementById('svc').value;
+ const lines=document.getElementById('lines').value||200;
+ const box=document.getElementById('logbox');
+ if(!svc){box.textContent='No service selected.';return;}
+ const r=await fetch(`api/logs/${encodeURIComponent(svc)}?lines=${lines}`);
+ box.textContent = r.ok ? (await r.text() || '(empty)') : `Error ${r.status}`;
+ box.scrollTop = box.scrollHeight;
+}
+loadServices(); refresh(); setInterval(refresh, 5000);
+// Optional auto-refresh of the currently selected log.
+setInterval(()=>{ if(document.getElementById('auto').checked) loadLogs(); }, 5000);
 </script></body></html>
 """
 
@@ -107,6 +142,19 @@ def create_app(
             }
             for r in runs
         ]
+
+    @app.get("/api/logs/services")
+    async def log_services() -> list[str]:
+        """List services whose log file currently exists in the shared log dir."""
+        return available_services(settings.log_dir)
+
+    @app.get("/api/logs/{service}", response_class=PlainTextResponse)
+    async def service_log(service: str, lines: int = 200) -> PlainTextResponse:
+        """Return the tail of one service's log (404 if unknown/unavailable)."""
+        content = tail_log(settings.log_dir, service, lines)
+        if content is None:
+            return PlainTextResponse("log not available", status_code=404)
+        return PlainTextResponse(content)
 
     @app.post("/api/collect")
     async def trigger_collection() -> JSONResponse:

@@ -51,6 +51,8 @@ actian-companion/
       models.py            # SQLAlchemy models (the schema's single source of truth)
       timeutils.py         # ISO-8601 parse + format (handles Z + nanoseconds)
       clients.py           # factory bundling the three API clients from Settings
+      logsetup.py          # console + rotating-file logging for the collector
+      logs.py              # per-service log file map + safe tail (web UI)
       api/
         __init__.py        # ApiError
         _http.py           # shared headers, request/GraphQL helpers, error wrapping
@@ -101,6 +103,10 @@ raises `RuntimeError` listing every missing required var.
 | `LOG_LEVEL` | no | `INFO` | Collector log level |
 | `WEBUI_HOST` | no | `0.0.0.0` | Web UI bind host |
 | `WEBUI_PORT` | no | `8000` | Web UI port |
+| `LOG_DIR` | no | `/var/log/actian` | Shared log dir (bind-mounted to `./logs`) |
+| `LOG_MAX_BYTES` | no | `5000000` | Collector log rotation size |
+| `LOG_BACKUP_COUNT` | no | `5` | Rotated collector logs kept |
+| `POSTGRES_LOG_MIN_MESSAGES` | no | `warning` | Postgres log verbosity (db services) |
 
 `Settings` is a frozen dataclass with a `database_url` property returning
 `postgresql+psycopg://USER:PASSWORD@HOST:PORT/DB`.
@@ -303,13 +309,24 @@ transaction. Run order each cycle: **users → audit → items**.
 ## 8. Web UI (`webui.py`, FastAPI)
 
 `create_app(settings, session_factory, lock)` returns a FastAPI app:
-- `GET /` → an HTML page: a **“Run collection now”** button and an
-  auto-refreshing table of the last 20 `collection_runs` (status + counts).
+- `GET /` → an HTML page: a **“Run collection now”** button, an auto-refreshing
+  table of the last 20 `collection_runs`, and a **per-service log viewer**
+  (service picker + tail).
 - `POST /api/collect` → if `lock.locked()` return **409** (`already running`);
   else launch `run_collection(settings, session_factory, lock)` as a background
   task and return **202**. The shared lock guarantees manual and cron runs never
   overlap.
 - `GET /api/runs` → last 20 runs as JSON.
+- `GET /api/logs/services` → services that have a log file in `LOG_DIR`.
+- `GET /api/logs/{service}?lines=N` → tail of that service's log (plain text;
+  404 if unknown). A fixed service→filename map prevents path traversal.
+
+**Per-service logging:** every service writes a log file into the shared
+`LOG_DIR` (bind-mounted to `./logs`): the collector via a `RotatingFileHandler`
+(`logsetup.configure_logging`), the two Postgres services via
+`logging_collector` (`db.log` / `metabase-db.log`, truncated daily), and
+Metabase by teeing its stdout to `metabase.log`. The host `./logs` dir must be
+writable by the container users (`chmod 777 logs`).
 
 ---
 
@@ -323,6 +340,10 @@ Four services, all env from `.env`:
 3. `metabase` — metabase/metabase:latest, port 3000, uses `metabase-db`.
 4. `metabase-db` — a second postgres:16 for Metabase's app data (separate DB),
    named volume, healthcheck.
+
+All services bind-mount `./logs` → `LOG_DIR` so each can write its log file and
+the collector can tail them. The two Postgres services run with
+`logging_collector` flags; Metabase tees stdout to `metabase.log`.
 
 Dockerfile: `python:3.12-slim`, install `requirements.txt`, copy app,
 `CMD ["python","-m","app.main"]`.

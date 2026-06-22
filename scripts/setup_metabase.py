@@ -120,6 +120,108 @@ CARDS: list[dict[str, Any]] = [
         ),
         "viz": {"graph.dimensions": ["permission_set"], "graph.metrics": ["users"]},
     },
+    # --- "Most Active Users" report -------------------------------------- #
+    # Activity = number of audit events authored by a known user (audit
+    # user_id joined to users). Most/least active per rolling window; least
+    # active is ranked among users with >= 1 event in the window.
+    *[
+        {
+            "key": f"mau_{rank}_{label}",
+            "name": f"{'Most' if rank == 'top' else 'Least'} Active Users ({label})",
+            "display": "row",
+            "sql": (
+                "SELECT COALESCE(u.display_name, ae.username, ae.user_id) AS user_name, "
+                "COUNT(*) AS events "
+                "FROM audit_events ae LEFT JOIN users u ON u.id = ae.user_id "
+                "WHERE ae.user_id IS NOT NULL "
+                f"AND ae.occurred_at >= NOW() - INTERVAL '{days} days' "
+                f"GROUP BY 1 ORDER BY events {direction}, user_name LIMIT 10"
+            ),
+            "viz": {"graph.dimensions": ["user_name"], "graph.metrics": ["events"]},
+        }
+        for label, days in (("last 7 days", 7), ("last 30 days", 30), ("last 365 days", 365))
+        for rank, direction in (("top", "DESC"), ("low", "ASC"))
+    ],
+    {
+        # Comprehensive list of all users with their all-time activity (0 included).
+        "key": "mau_all_users",
+        "name": "All Users — Activity Summary",
+        "display": "table",
+        "sql": (
+            "SELECT COALESCE(u.display_name, u.username) AS user_name, u.email, "
+            "u.is_steward, COUNT(ae.event_id) AS total_events, "
+            "MAX(ae.occurred_at) AS last_activity "
+            "FROM users u LEFT JOIN audit_events ae ON ae.user_id = u.id "
+            "GROUP BY u.id, u.display_name, u.username, u.email, u.is_steward "
+            "ORDER BY total_events DESC"
+        ),
+        "viz": {},
+    },
+    # --- "Most Updated Items" report ------------------------------------- #
+    {
+        "key": "mui_top10",
+        "name": "Most Updated Items (top 10)",
+        "display": "row",
+        "sql": (
+            "SELECT COALESCE(item_name, item_id) AS item, COUNT(*) AS modifications "
+            "FROM audit_events WHERE item_id IS NOT NULL "
+            "GROUP BY item_id, item_name ORDER BY modifications DESC LIMIT 10"
+        ),
+        "viz": {"graph.dimensions": ["item"], "graph.metrics": ["modifications"]},
+    },
+    {
+        "key": "mui_table",
+        "name": "Most Updated Items (detail)",
+        "display": "table",
+        "sql": (
+            "SELECT COALESCE(item_name, item_id) AS item, item_type, "
+            "COUNT(*) AS modifications, MAX(occurred_at) AS last_modified "
+            "FROM audit_events WHERE item_id IS NOT NULL "
+            "GROUP BY item_id, item_name, item_type "
+            "ORDER BY modifications DESC LIMIT 25"
+        ),
+        "viz": {},
+    },
+    # --- "Documentation coverage per curator" report --------------------- #
+    # coverage_ratio = (managed items the curator has an edit event on) /
+    # (items the curator manages). Managed = items.owner_id is the curator.
+    {
+        "key": "dcc_ratio",
+        "name": "Documentation Coverage Ratio per Curator",
+        "display": "row",
+        "sql": (
+            "WITH edited AS ("
+            " SELECT DISTINCT user_id, item_id FROM audit_events "
+            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL) "
+            "SELECT COALESCE(i.owner_name, i.owner_email, i.owner_id) AS curator, "
+            "ROUND(COUNT(e.item_id)::numeric / NULLIF(COUNT(*), 0), 3) AS coverage_ratio "
+            "FROM items i "
+            "LEFT JOIN edited e ON e.user_id = i.owner_id AND e.item_id = i.id "
+            "WHERE i.owner_id IS NOT NULL "
+            "GROUP BY i.owner_id, COALESCE(i.owner_name, i.owner_email, i.owner_id) "
+            "ORDER BY coverage_ratio DESC"
+        ),
+        "viz": {"graph.dimensions": ["curator"], "graph.metrics": ["coverage_ratio"]},
+    },
+    {
+        "key": "dcc_table",
+        "name": "Documentation Coverage per Curator (detail)",
+        "display": "table",
+        "sql": (
+            "WITH edited AS ("
+            " SELECT DISTINCT user_id, item_id FROM audit_events "
+            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL) "
+            "SELECT COALESCE(i.owner_name, i.owner_email, i.owner_id) AS curator, "
+            "COUNT(*) AS managed_items, COUNT(e.item_id) AS edited_items, "
+            "ROUND(COUNT(e.item_id)::numeric / NULLIF(COUNT(*), 0), 3) AS coverage_ratio "
+            "FROM items i "
+            "LEFT JOIN edited e ON e.user_id = i.owner_id AND e.item_id = i.id "
+            "WHERE i.owner_id IS NOT NULL "
+            "GROUP BY i.owner_id, COALESCE(i.owner_name, i.owner_email, i.owner_id) "
+            "ORDER BY coverage_ratio DESC"
+        ),
+        "viz": {},
+    },
 ]
 
 # Dashboards reference cards by key with a 24-column grid layout.
@@ -142,6 +244,36 @@ DASHBOARDS: list[dict[str, Any]] = [
             ("stewards_breakdown", 0, 0, 8, 8),
             ("users_by_permission_set", 0, 8, 16, 8),
             ("top_users_by_logins", 8, 0, 24, 8),
+        ],
+    },
+    {
+        "name": "Most Active Users",
+        "description": "User activity from audit events: most/least active per "
+        "rolling week, month and year, plus all users.",
+        "layout": [
+            ("mau_top_last 7 days", 0, 0, 12, 8),
+            ("mau_low_last 7 days", 0, 12, 12, 8),
+            ("mau_top_last 30 days", 8, 0, 12, 8),
+            ("mau_low_last 30 days", 8, 12, 12, 8),
+            ("mau_top_last 365 days", 16, 0, 12, 8),
+            ("mau_low_last 365 days", 16, 12, 12, 8),
+            ("mau_all_users", 24, 0, 24, 9),
+        ],
+    },
+    {
+        "name": "Most Updated Items",
+        "description": "Items ranked by number of modifications in the audit trail.",
+        "layout": [
+            ("mui_top10", 0, 0, 12, 8),
+            ("mui_table", 0, 12, 12, 9),
+        ],
+    },
+    {
+        "name": "Documentation Coverage per Curator",
+        "description": "Per curator: edited managed items / managed items.",
+        "layout": [
+            ("dcc_ratio", 0, 0, 24, 8),
+            ("dcc_table", 8, 0, 24, 8),
         ],
     },
 ]

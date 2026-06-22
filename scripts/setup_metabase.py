@@ -52,11 +52,18 @@ CARDS: list[dict[str, Any]] = [
         "name": "Top Modified Items (last 30 days)",
         "display": "table",
         "sql": (
-            "SELECT item_name, item_type, COUNT(*) AS modifications "
-            "FROM audit_events "
-            "WHERE user_id IS NOT NULL "
-            "AND occurred_at >= NOW() - INTERVAL '30 days' "
-            "GROUP BY item_name, item_type ORDER BY modifications DESC LIMIT 20"
+            # item_type comes from the Catalog (items table), not the audit
+            # trail (where it is always 'Item').
+            "SELECT COALESCE(NULLIF(i.name, ''), NULLIF(ae.item_name, ''), "
+            "ae.item_id) AS item_name, "
+            "COALESCE(i.item_type, '(unknown)') AS item_type, "
+            "COUNT(*) AS modifications "
+            "FROM audit_events ae "
+            "LEFT JOIN items i ON i.id = ae.item_id "
+            "WHERE ae.user_id IS NOT NULL "
+            "AND ae.occurred_at >= NOW() - INTERVAL '30 days' "
+            "GROUP BY ae.item_id, i.name, ae.item_name, i.item_type "
+            "ORDER BY modifications DESC LIMIT 20"
         ),
         "viz": {},
     },
@@ -179,10 +186,13 @@ CARDS: list[dict[str, Any]] = [
         "name": "Most Updated Items (detail)",
         "display": "table",
         "sql": (
-            "SELECT COALESCE(item_name, item_id) AS item, item_type, "
-            "COUNT(*) AS modifications, MAX(occurred_at) AS last_modified "
-            "FROM audit_events WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
-            "GROUP BY item_id, item_name, item_type "
+            # item_type from the Catalog (items table), not the audit trail.
+            "SELECT COALESCE(i.name, ae.item_name, ae.item_id) AS item, "
+            "COALESCE(i.item_type, '(unknown)') AS item_type, "
+            "COUNT(*) AS modifications, MAX(ae.occurred_at) AS last_modified "
+            "FROM audit_events ae LEFT JOIN items i ON i.id = ae.item_id "
+            "WHERE ae.user_id IS NOT NULL AND ae.item_id IS NOT NULL "
+            "GROUP BY ae.item_id, i.name, ae.item_name, i.item_type "
             "ORDER BY modifications DESC LIMIT 25"
         ),
         "viz": {},

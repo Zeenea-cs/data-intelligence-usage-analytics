@@ -113,19 +113,29 @@ Default admin login (override via `.env` — see §3):
 > Change `METABASE_ADMIN_PASSWORD` in `.env` before running in any shared
 > environment.
 
-The script creates **two example dashboards** for users to build on:
+The script creates **five example dashboards** for users to build on:
 
 **Actian Data Intelligence Activity** (audit-event activity)
-- **Top Contributors (last 30 days)**
-- **Top Modified Items (last 30 days)**
-- **Weekly Documentation Pace**
-- **Events by Action**
-- **Daily Activity (last 30 days)**
+- Top Contributors (last 30 days), Top Modified Items (last 30 days), Weekly
+  Documentation Pace, Events by Action, Daily Activity (last 30 days).
 
 **Users & Stewardship** (user population)
-- **Stewards vs Non-stewards**
-- **Users by Permission Set**
-- **Most Active Users (by login count)**
+- Stewards vs Non-stewards, Users by Permission Set, Most Active Users (by login
+  count).
+
+**Most Active Users** (activity from audit events)
+- Most / Least active users for each rolling window — last 7 days, 30 days,
+  365 days (top-10 each; least-active ranks users with ≥1 event) — plus an
+  *All Users — Activity Summary* table (every user, all-time event count).
+
+**Most Updated Items** (audit events)
+- Top-10 items by number of modifications, plus a detail table (type, count,
+  last modified).
+
+**Documentation Coverage per Curator**
+- Per curator, a coverage ratio = *managed items the curator has edited* ÷
+  *items the curator manages* (managed = the item's curator). Bar + detail table
+  (managed / edited / ratio).
 
 Re-run any time after a fresh collection to refresh:
 

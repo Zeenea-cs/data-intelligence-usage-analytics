@@ -338,14 +338,21 @@ Idempotent. Steps: poll `/api/health`; complete the setup wizard if
 with a `dashcards` layout (Metabase v0.62 shape). Branch on `has-user-setup`
 (not the setup token, which persists after setup).
 
-Create at least these cards and two example dashboards:
+Create at least these cards and five example dashboards:
 - **Activity** — Top Contributors (30d), Top Modified Items (30d), Weekly
-  Documentation Pace, Events by Action, Daily Activity (30d). (The three CLAUDE
-  questions plus extras.)
+  Documentation Pace, Events by Action, Daily Activity (30d).
 - **Users & Stewardship** — Stewards vs Non-stewards, Users by Permission Set,
   Most Active Users (by login count = `attributes->>'Logins count'`).
-SQL runs against `audit_events` and `users` (e.g. Top Contributors = count of
-`audit_events` grouped by `COALESCE(username, user_id)` over 30 days).
+- **Most Active Users** — most/least active users (top-10) for rolling 7/30/365-day
+  windows (activity = count of `audit_events` by known `user_id` joined to
+  `users`; least-active ranked among users with ≥1 event), plus an all-users
+  all-time activity table.
+- **Most Updated Items** — top-10 items by modification count + a detail table.
+- **Documentation Coverage per Curator** — `coverage_ratio = (managed items the
+  curator has an edit event on) / (items the curator manages)`, where managed =
+  `items.owner_id` is the curator and an edit = an `audit_events` row with that
+  `user_id` and `item_id`.
+SQL runs against `audit_events`, `users` and `items`.
 
 ---
 

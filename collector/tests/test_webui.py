@@ -61,6 +61,8 @@ def test_index_and_runs_endpoints() -> None:
         index = client.get("/")
         assert index.status_code == 200
         assert "Run collection now" in index.text
+        # The configured Data Catalog instance URL is shown on the page.
+        assert _SETTINGS.actian_instance_url in index.text
 
         runs = client.get("/api/runs")
         assert runs.status_code == 200

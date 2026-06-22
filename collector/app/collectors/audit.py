@@ -62,32 +62,35 @@ async def collect_audit_events(
     usernames = await _load_usernames(session)
     now = datetime.now(timezone.utc)
 
-    db_rows: list[dict[str, Any]] = []
+    # Keyed by event_id so a duplicate event seen within one run (e.g. overlapping
+    # pages) collapses to a single row, last occurrence winning. Cross-run dedup is
+    # handled separately by the ON CONFLICT (event_id) DO UPDATE upsert below; a
+    # repeated event_id in one multi-row INSERT would otherwise raise "ON CONFLICT
+    # DO UPDATE command cannot affect row a second time".
+    db_rows: dict[str, dict[str, Any]] = {}
     async for event in client.iter_item_events(since=since, until=until):
         origin = event.get("origin") or {}
         origin_id = origin.get("id") if origin.get("originType") == "User" else None
         # Only set the FK when the user is known, to avoid a constraint failure;
         # the full origin remains available in raw_payload regardless.
         user_id = origin_id if origin_id in usernames else None
-        db_rows.append(
-            {
-                "event_id": event["id"],
-                "user_id": user_id,
-                "username": usernames.get(origin_id),
-                "action": event.get("itemEventType"),
-                "item_id": event.get("itemId"),
-                "item_type": event.get("eventType"),
-                "item_name": event.get("itemName"),
-                "occurred_at": parse_iso_timestamp(event.get("timestamp")),
-                "raw_payload": event,
-                "collected_at": now,
-            }
-        )
+        db_rows[event["id"]] = {
+            "event_id": event["id"],
+            "user_id": user_id,
+            "username": usernames.get(origin_id),
+            "action": event.get("itemEventType"),
+            "item_id": event.get("itemId"),
+            "item_type": event.get("eventType"),
+            "item_name": event.get("itemName"),
+            "occurred_at": parse_iso_timestamp(event.get("timestamp")),
+            "raw_payload": event,
+            "collected_at": now,
+        }
 
     count = await upsert_rows(
         session,
         AuditEvent.__table__,
-        db_rows,
+        list(db_rows.values()),
         index_elements=["event_id"],
         update_columns=_UPDATE_COLUMNS,
     )

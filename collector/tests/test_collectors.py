@@ -285,6 +285,110 @@ async def _run_collect_audit() -> None:
     assert e2.username is None
     assert e2.raw_payload["origin"]["id"] == "unknown-user"
 
+    # A subsequent run with a CHANGED payload for an existing event_id updates the
+    # row in place -- no new row is added.
+    changed = _item_event("evt-1", "22222222", action="DeleteItem")
+    changed["itemName"] = "Renamed Item"
+    async with factory() as session:
+        await collect_audit_events(session, FakeAuditClient([changed]))
+        await session.commit()
+
+    async with factory() as session:
+        total_after = await session.scalar(select(func.count()).select_from(AuditEvent))
+        e1_after = (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.event_id == "evt-1")
+            )
+        ).scalar_one()
+    assert total_after == 2  # still two rows: updated, not inserted
+    assert e1_after.action == "DeleteItem"
+    assert e1_after.item_name == "Renamed Item"
+
+    await engine.dispose()
+
+
+def test_collect_audit_dedupes_duplicate_event_id_within_run() -> None:
+    """The same event_id seen twice in one run collapses to a single row."""
+    asyncio.run(_run_collect_audit_intra_run_dedup())
+
+
+async def _run_collect_audit_intra_run_dedup() -> None:
+    engine = await _make_engine()
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Same event_id twice (e.g. overlapping pages); second occurrence differs.
+    first = _item_event("dup-1", "unknown", action="CreateItem")
+    second = _item_event("dup-1", "unknown", action="UpdateItem")
+    client = FakeAuditClient([first, second])
+
+    async with factory() as session:
+        count = await collect_audit_events(session, client)
+        await session.commit()
+    assert count == 1  # collapsed before insert
+
+    async with factory() as session:
+        total = await session.scalar(select(func.count()).select_from(AuditEvent))
+        row = (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.event_id == "dup-1")
+            )
+        ).scalar_one()
+    assert total == 1
+    assert row.action == "UpdateItem"  # last occurrence wins
+
+    await engine.dispose()
+
+
+def test_upsert_rows_chunks_large_batches() -> None:
+    """A batch whose (rows * columns) exceeds the bind-param limit is chunked.
+
+    audit_events has 10 columns; 5000 rows -> 50000 params, over SQLite's 32766
+    (and a stand-in for PostgreSQL's 65535). Without chunking this raises; the
+    upsert must succeed and persist every row.
+    """
+    asyncio.run(_run_upsert_rows_chunks_large_batches())
+
+
+async def _run_upsert_rows_chunks_large_batches() -> None:
+    from datetime import datetime, timezone
+
+    from app.database import upsert_rows
+
+    engine = await _make_engine()
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    now = datetime.now(timezone.utc)
+    rows = [
+        {
+            "event_id": f"evt-{i}",
+            "user_id": None,
+            "username": None,
+            "action": "CreateItem",
+            "item_id": f"item-{i}",
+            "item_type": "Item",
+            "item_name": "Some Item",
+            "occurred_at": now,
+            "raw_payload": {"id": f"evt-{i}"},
+            "collected_at": now,
+        }
+        for i in range(5000)
+    ]
+
+    async with factory() as session:
+        count = await upsert_rows(
+            session,
+            AuditEvent.__table__,
+            rows,
+            index_elements=["event_id"],
+            update_columns=("action", "item_name"),
+        )
+        await session.commit()
+    assert count == 5000
+
+    async with factory() as session:
+        total = await session.scalar(select(func.count()).select_from(AuditEvent))
+    assert total == 5000
+
     await engine.dispose()
 
 

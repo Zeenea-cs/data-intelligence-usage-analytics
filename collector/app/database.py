@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from itertools import islice
 from typing import Any
 
-from sqlalchemy import Table
+from sqlalchemy import Table, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import (
@@ -80,6 +80,22 @@ async def session_scope(
         raise
     finally:
         await session.close()
+
+
+async def reinit_data(session: AsyncSession) -> None:
+    """Delete all collected data, preserving the ``collection_runs`` history.
+
+    Clears ``audit_events``, ``items`` and ``users`` in foreign-key-safe order
+    (``audit_events`` references ``users``). Used by the "Force reload history"
+    action so a reload fully replaces existing rows rather than upserting onto
+    them. ``DELETE`` (not ``TRUNCATE``) keeps the same code path working on both
+    PostgreSQL and the SQLite test engine. Runs in the caller's transaction.
+    """
+    # Imported here to avoid a circular import (models imports nothing from here).
+    from app.models import AuditEvent, Item, User
+
+    for model in (AuditEvent, Item, User):
+        await session.execute(delete(model))
 
 
 async def upsert_rows(

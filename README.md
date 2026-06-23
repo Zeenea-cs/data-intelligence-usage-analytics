@@ -289,20 +289,47 @@ recorded as a row in the `collection_runs` table (`status` =
 The collector serves a small web UI at <http://localhost:8000>:
 
 - A **“Run collection now”** button triggers a full cycle on demand, bypassing
-  the cron schedule.
+  the cron schedule. It **adds to / updates** existing data (upsert): new and
+  changed users, events and items are written; nothing is deleted.
+- A **“Force reload history”** button (with a *days* input) **rebuilds the data
+  from scratch**: it first deletes all collected `users`, `items` and
+  `audit_events`, then runs a full collection with the audit window bounded to
+  the number of days you entered. Use it to recover from bad/partial data or to
+  change how far back the audit history goes. The `collection_runs` history is
+  **kept**. This action is destructive and asks for confirmation in the UI.
 - A table shows recent runs (status + per-collector counts), auto-refreshing.
-- The trigger shares a lock with the scheduler, so manual and cron runs never
-  overlap (a second trigger while one is running returns *already running*).
+- Both actions share a lock with the scheduler, so manual, reload and cron runs
+  never overlap (triggering one while another is running returns *already
+  running*, HTTP 409).
 
 - A **per-service log viewer**: pick a service (collector, db, metabase,
   metabase-db) and tail the last N lines of its log on demand (optional
   auto-refresh).
 
+#### How the two collection actions differ
+
+| | Run collection now | Force reload history |
+|---|---|---|
+| Existing data | kept (upsert) | **deleted first**, then reloaded |
+| Audit window | configured `AUDIT_INITIAL_DAYS` | the *days* value you pass |
+| Users / items | refreshed (upsert) | wiped, then re-collected (full snapshot) |
+| `collection_runs` | appended | appended (history preserved) |
+| API | `POST /api/collect` | `POST /api/reload` |
+
 ```
 POST http://localhost:8000/api/collect    # 202 started, or 409 if already running
+POST http://localhost:8000/api/reload      # body {"days": 30}; 202 started,
+                                           #   400 if 'days' invalid, 409 if already running
 GET  http://localhost:8000/api/runs        # recent collection_runs as JSON
 GET  http://localhost:8000/api/logs/services        # services with a log file
 GET  http://localhost:8000/api/logs/{service}?lines=200   # tail a service log
+```
+
+Example reload via the API:
+
+```bash
+curl -X POST http://localhost:8000/api/reload \
+  -H 'Content-Type: application/json' -d '{"days": 30}'
 ```
 
 Each service writes its log into the shared `./logs` directory (bind-mounted

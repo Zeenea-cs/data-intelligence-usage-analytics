@@ -3,8 +3,13 @@
 Features:
 * a "Run collection now" button to trigger a cycle on demand (shares the
   collection lock with the scheduler, so manual and cron runs never overlap);
+* a "Force reload history" button that wipes the collected data and reloads a
+  user-specified number of days of history;
 * a table of recent collection runs;
 * a per-service log viewer that tails each service's log file on demand.
+
+The two actions are also exposed as JSON API endpoints (POST /api/collect and
+POST /api/reload).
 
 Mounted by main.py alongside the AsyncIOScheduler in the same event loop.
 """
@@ -16,7 +21,7 @@ import html
 import logging
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -24,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.logs import available_services, tail_log
 from app.models import CollectionRun
-from app.scheduler import run_collection
+from app.scheduler import force_reload, run_collection
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +59,13 @@ _PAGE = """<!doctype html>
 <p>Data Catalog instance: <code>__INSTANCE_URL__</code></p>
 <p>Trigger a data collection now, bypassing the cron schedule.</p>
 <button id="run" onclick="trigger()">Run collection now</button>
+<button id="reload" onclick="forceReload()" style="background:#cf222e">Force reload history</button>
+<label style="margin-left:.4rem">days
+ <input id="days" type="number" value="365" min="1" style="width:6rem"></label>
 <span id="msg"></span>
+<p style="font-size:.8rem;color:#777;margin-top:.4rem">
+ "Force reload history" deletes all collected users, items and events, then
+ reloads the chosen number of days. Run history is kept.</p>
 <table id="runs"><thead><tr>
  <th>Started</th><th>Finished</th><th>Status</th>
  <th>Users</th><th>Events</th><th>Items</th><th>Error</th>
@@ -80,13 +91,30 @@ async function refresh(){
   tb.appendChild(tr);
  }
 }
+function setBusy(b){
+ document.getElementById('run').disabled=b;
+ document.getElementById('reload').disabled=b;
+}
 async function trigger(){
- const btn=document.getElementById('run'); const msg=document.getElementById('msg');
- btn.disabled=true; msg.textContent='Starting...';
+ const msg=document.getElementById('msg');
+ setBusy(true); msg.textContent='Starting...';
  const r=await fetch('api/collect',{method:'POST'}); const j=await r.json();
  msg.textContent = r.status===202 ? 'Collection started - refreshing...'
    : (j.detail||'Already running');
- setTimeout(async()=>{await refresh(); btn.disabled=false; msg.textContent='';}, 4000);
+ setTimeout(async()=>{await refresh(); setBusy(false); msg.textContent='';}, 4000);
+}
+async function forceReload(){
+ const msg=document.getElementById('msg');
+ const days=parseInt(document.getElementById('days').value||'0',10);
+ if(!(days>=1)){alert('Enter a positive number of days.');return;}
+ if(!confirm(`This DELETES all collected data and reloads the last ${days} day(s). Continue?`))return;
+ setBusy(true); msg.textContent='Reloading history...';
+ const r=await fetch('api/reload',{method:'POST',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify({days})});
+ const j=await r.json();
+ msg.textContent = r.status===202 ? 'History reload started - refreshing...'
+   : (j.detail||'Already running');
+ setTimeout(async()=>{await refresh(); setBusy(false); msg.textContent='';}, 4000);
 }
 async function loadServices(){
  const svc=document.getElementById('svc');
@@ -161,17 +189,41 @@ def create_app(
             return PlainTextResponse("log not available", status_code=404)
         return PlainTextResponse(content)
 
+    def _launch(coro: Any) -> None:
+        """Run a coroutine in the background, holding a reference to it."""
+        task = asyncio.ensure_future(coro)
+        # Hold a reference so the task is not garbage-collected mid-run.
+        app.state.tasks.add(task)
+        task.add_done_callback(app.state.tasks.discard)
+
     @app.post("/api/collect")
     async def trigger_collection() -> JSONResponse:
         if lock.locked():
             return JSONResponse(
                 status_code=409, content={"detail": "A collection is already running"}
             )
-        task = asyncio.create_task(run_collection(settings, session_factory, lock))
-        # Hold a reference so the task is not garbage-collected mid-run.
-        app.state.tasks.add(task)
-        task.add_done_callback(app.state.tasks.discard)
+        _launch(run_collection(settings, session_factory, lock))
         logger.info("Manual collection triggered via web UI")
         return JSONResponse(status_code=202, content={"detail": "Collection started"})
+
+    @app.post("/api/reload")
+    async def trigger_reload(payload: dict[str, Any] | None = Body(default=None)) -> JSONResponse:
+        """Wipe collected data and reload ``days`` of history (run history kept)."""
+        days = (payload or {}).get("days")
+        if not isinstance(days, int) or isinstance(days, bool) or days < 1:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "'days' must be a positive integer"},
+            )
+        if lock.locked():
+            return JSONResponse(
+                status_code=409, content={"detail": "A collection is already running"}
+            )
+        _launch(force_reload(settings, session_factory, days, lock))
+        logger.info("Force reload triggered via web UI: last %s day(s)", days)
+        return JSONResponse(
+            status_code=202,
+            content={"detail": f"History reload started for the last {days} day(s)"},
+        )
 
     return app

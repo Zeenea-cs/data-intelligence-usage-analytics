@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -25,8 +25,9 @@ from app.collectors.audit import collect_audit_events
 from app.collectors.items import collect_items
 from app.collectors.users import collect_users
 from app.config import Settings
-from app.database import session_scope
+from app.database import reinit_data, session_scope
 from app.models import CollectionRun
+from app.timeutils import iso_millis
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,19 @@ async def execute_collection(
     users_client: UsersClient,
     audit_client: AuditClient,
     catalog_client: CatalogClient,
+    since: str | None = None,
+    until: str | None = None,
 ) -> str:
     """Run the full collection cycle and record a `collection_runs` row.
 
     Collectors run in order, each in its own transaction so one failure does not
     roll back the others. Returns the run status (``success`` / ``partial`` /
     ``failed``).
+
+    Args:
+        since: optional ISO-8601 window start for audit events; when omitted the
+            audit client uses its configured look-back (AUDIT_INITIAL_DAYS).
+        until: optional ISO-8601 window end for audit events.
     """
     started_at = datetime.now(timezone.utc)
     counts = {"users": 0, "events": 0, "items": 0}
@@ -52,7 +60,7 @@ async def execute_collection(
 
     steps = (
         ("users", lambda s: collect_users(s, users_client)),
-        ("events", lambda s: collect_audit_events(s, audit_client)),
+        ("events", lambda s: collect_audit_events(s, audit_client, since=since, until=until)),
         ("items", lambda s: collect_items(s, catalog_client)),
     )
     for name, run_step in steps:
@@ -116,6 +124,42 @@ async def run_collection(
         )
 
     # The optional lock serialises manual (web) and scheduled runs.
+    if lock is None:
+        return await _go()
+    async with lock:
+        return await _go()
+
+
+async def force_reload(
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    days: int,
+    lock: asyncio.Lock | None = None,
+) -> str:
+    """Wipe collected data and reload the last ``days`` of history.
+
+    Clears ``users``, ``items`` and ``audit_events`` (``collection_runs`` history
+    is preserved), then runs a full collection with the audit window bounded to
+    the last ``days`` days. Users and items are full snapshots, so they are
+    replaced regardless of the window. Holds ``lock`` (when given) for the whole
+    operation so it never overlaps a scheduled or manual run. Returns the run
+    status.
+    """
+    clients = build_clients(settings)
+    since = iso_millis(datetime.now(timezone.utc) - timedelta(days=days))
+
+    async def _go() -> str:
+        async with session_scope(session_factory) as session:
+            await reinit_data(session)
+        logger.info("Force reload: data cleared, reloading last %s day(s)", days)
+        return await execute_collection(
+            session_factory,
+            users_client=clients.users,
+            audit_client=clients.audit,
+            catalog_client=clients.catalog,
+            since=since,
+        )
+
     if lock is None:
         return await _go()
     async with lock:

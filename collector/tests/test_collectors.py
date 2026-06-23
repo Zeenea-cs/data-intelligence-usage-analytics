@@ -392,6 +392,97 @@ async def _run_upsert_rows_chunks_large_batches() -> None:
     await engine.dispose()
 
 
+def test_reinit_data_clears_data_keeps_runs() -> None:
+    """reinit_data empties users/items/audit_events but keeps collection_runs."""
+    asyncio.run(_run_reinit_data())
+
+
+async def _run_reinit_data() -> None:
+    from datetime import datetime, timezone
+
+    from app.database import reinit_data
+    from app.models import CollectionRun, Item
+
+    engine = await _make_engine()
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    now = datetime.now(timezone.utc)
+
+    async with factory() as session:
+        session.add(User(id="u1", username="u1@x.com", is_steward=False))
+        session.add(Item(id="i1", item_type="dataset", name="I1"))
+        session.add(
+            AuditEvent(event_id="e1", action="CreateItem", occurred_at=now, collected_at=now)
+        )
+        session.add(CollectionRun(started_at=now, finished_at=now, status="success"))
+        await session.commit()
+
+    async with factory() as session:
+        await reinit_data(session)
+        await session.commit()
+
+    async with factory() as session:
+        assert await session.scalar(select(func.count()).select_from(User)) == 0
+        assert await session.scalar(select(func.count()).select_from(Item)) == 0
+        assert await session.scalar(select(func.count()).select_from(AuditEvent)) == 0
+        # Run history is preserved.
+        assert await session.scalar(select(func.count()).select_from(CollectionRun)) == 1
+
+    await engine.dispose()
+
+
+def test_force_reload_replaces_stale_data() -> None:
+    """force_reload wipes pre-existing rows and reloads via the collectors."""
+    asyncio.run(_run_force_reload())
+
+
+async def _run_force_reload() -> None:
+    from app import scheduler
+    from app.models import CollectionRun
+
+    engine = await _make_engine()
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    now = parse_iso_timestamp("2026-06-20T00:00:00.000Z")
+
+    # Seed a stale audit event that the reload must remove (not in fresh data).
+    async with factory() as session:
+        session.add(AuditEvent(event_id="stale", action="X", occurred_at=now, collected_at=now))
+        await session.commit()
+
+    # Fresh data the reload pulls in; only the audit collector runs for real.
+    fresh = FakeAuditClient([_item_event("fresh-1", "unknown")])
+
+    class _Clients:
+        users = object()
+        audit = fresh
+        catalog = object()
+
+    async def _zero_users(session: Any, client: Any) -> int:
+        return 0
+
+    async def _zero_items(session: Any, client: Any) -> int:
+        return 0
+
+    # Patch the scheduler's collaborators so no network or other collector runs.
+    originals = (scheduler.build_clients, scheduler.collect_users, scheduler.collect_items)
+    scheduler.build_clients = lambda settings: _Clients()  # type: ignore[assignment]
+    scheduler.collect_users = _zero_users  # type: ignore[assignment]
+    scheduler.collect_items = _zero_items  # type: ignore[assignment]
+    try:
+        status = await scheduler.force_reload(object(), factory, days=10)
+    finally:
+        scheduler.build_clients, scheduler.collect_users, scheduler.collect_items = originals
+    assert status == "success"
+
+    async with factory() as session:
+        ids = (await session.execute(select(AuditEvent.event_id))).scalars().all()
+        assert "stale" not in ids  # wiped
+        assert "fresh-1" in ids  # reloaded
+        # Run history row recorded by the reload.
+        assert await session.scalar(select(func.count()).select_from(CollectionRun)) == 1
+
+    await engine.dispose()
+
+
 def test_parse_timestamp_handles_nanoseconds_and_z() -> None:
     """Nanosecond precision and trailing Z are normalised to a tz-aware datetime."""
     parsed = parse_iso_timestamp("2026-06-15T15:30:10.976397254Z")

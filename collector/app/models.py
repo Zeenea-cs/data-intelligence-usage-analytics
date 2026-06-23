@@ -1,8 +1,9 @@
 """SQLAlchemy ORM models -- the single source of truth for the schema.
 
-Four tables: users, audit_events, items, collection_runs. This is a 1.0
-application with no deployment history, so the schema is created directly from
-this metadata at startup (see database.create_schema); there are no migrations.
+Four tables: users, audit_events, items, collection_runs. These models are the
+source of truth for the schema; the Alembic migrations under ``migrations/``
+must be kept in step with them (the collector runs them to head at startup --
+see app.migrate). The initial schema is migration ``001_initial_schema``.
 
 The JSONB / BigInteger columns use dialect variants so the same models build on
 PostgreSQL (production) and SQLite (tests).

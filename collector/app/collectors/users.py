@@ -111,7 +111,11 @@ async def collect_users(session: AsyncSession, client: UsersClient) -> int:
             the caller records the run as partial.
     """
     export_rows = await client.export_all_users()
-    permission_sets = {ps["id"]: ps for ps in await client.list_permission_sets()}
+    # Key by id, skipping any set without one so a malformed entry cannot crash
+    # the whole collection (the row falls back to its CSV permission columns).
+    permission_sets = {
+        ps["id"]: ps for ps in await client.list_permission_sets() if ps.get("id")
+    }
 
     scim_by_id: dict[str, dict[str, Any]] = {}
     async for resource in client.iter_scim_users():

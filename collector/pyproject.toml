@@ -1,0 +1,16 @@
+[project]
+name = "actian-companion-collector"
+version = "1.0.0"
+description = "Collector service for the Actian Data Intelligence Companion"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+# Put the collector root on sys.path so `import app...` works without setting
+# PYTHONPATH by hand or installing the package.
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+# Keep ruff's default rule set (the codebase is already clean under it); only
+# pin the target version so checks are reproducible.

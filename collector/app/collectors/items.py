@@ -56,13 +56,14 @@ async def _stored_freshness(session: AsyncSession) -> dict[str, datetime | None]
     Freshness is tracked separately from ``last_updated_at`` (which holds the
     item's catalog update time, a user-facing field) so re-fetch decisions are
     based on when *we* last fetched, not when the catalog changed.
+
+    Only the ``fetchedAt`` path is extracted in SQL (``->>`` on PostgreSQL,
+    ``json_extract`` on SQLite) rather than loading every row's full attributes
+    blob into Python.
     """
-    result = await session.execute(select(Item.id, Item.attributes))
-    out: dict[str, datetime | None] = {}
-    for row in result.all():
-        fetched = (row.attributes or {}).get("fetchedAt")
-        out[row.id] = parse_iso_timestamp(fetched)
-    return out
+    fetched_at = Item.attributes["fetchedAt"].as_string()
+    result = await session.execute(select(Item.id, fetched_at))
+    return {item_id: parse_iso_timestamp(fetched) for item_id, fetched in result.all()}
 
 
 def _select_refs(

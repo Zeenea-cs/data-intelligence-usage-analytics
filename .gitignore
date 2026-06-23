@@ -1,6 +1,10 @@
 # Secrets / local config -- NEVER commit real credentials
+# Match .env and any .env.<suffix> variant (e.g. .env.acme), but
+# keep the committed template. `.env.*` is needed because `*.env` only matches
+# names ending in `.env`, missing files like `.env.acme`.
 .env
 *.env
+.env.*
 !.env.example
 
 # Python

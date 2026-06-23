@@ -25,12 +25,14 @@ import io
 from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
+
 from app.api import ApiError
 from app.api._http import (
     bearer_headers,
     graphql,
     make_client,
-    secret_headers,
+    secret_client,
     send_json,
     send_text,
 )
@@ -70,10 +72,8 @@ class UsersClient:
         self._poll_interval = poll_interval  # seconds between export-status polls
         self._max_polls = max_polls  # give up after this many polls
 
-    def _graphql_client(self) -> Any:
-        return make_client(
-            self._base_url, secret_headers(self._api_key, json_body=True), self._timeout
-        )
+    def _graphql_client(self) -> httpx.AsyncClient:
+        return secret_client(self._base_url, self._api_key, self._timeout)
 
     # -- User Management: bulk export -----------------------------------
 
@@ -166,8 +166,14 @@ class UsersClient:
                 for resource in resources:
                     yield resource
 
-                # Stop once we've walked past the reported total.
+                # A short page means the last page -- the reliable stop signal.
+                # Otherwise advance by the page actually returned, and also stop
+                # once we've walked past `totalResults` when the server reports
+                # it (a server omitting it is handled by the short-page check).
+                if len(resources) < page_size:
+                    break
                 next_index = body.get("startIndex", start_index) + len(resources)
-                if next_index > body.get("totalResults", 0):
+                total = body.get("totalResults")
+                if total is not None and next_index > total:
                     break
                 start_index = next_index

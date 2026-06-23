@@ -22,7 +22,9 @@ import asyncio
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
-from app.api._http import graphql, make_client, secret_headers
+import httpx
+
+from app.api._http import graphql, secret_client
 
 CATALOG_PATH = "/api/catalog/graphql"
 ITEM_NOT_FOUND = "ITEM_NOT_FOUND"
@@ -73,10 +75,8 @@ class CatalogClient:
         self._api_key = api_key
         self._timeout = timeout
 
-    def _client(self) -> Any:
-        return make_client(
-            self._base_url, secret_headers(self._api_key, json_body=True), self._timeout
-        )
+    def _client(self) -> httpx.AsyncClient:
+        return secret_client(self._base_url, self._api_key, self._timeout)
 
     async def fetch_items(
         self, refs: Sequence[str], *, concurrency: int = FETCH_CONCURRENCY

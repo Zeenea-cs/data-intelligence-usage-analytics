@@ -2,7 +2,7 @@
 
 Startup sequence:
 1. load + validate settings;
-2. create the database schema from the ORM metadata (1.0 -- no migrations);
+2. run Alembic migrations to head (creates/updates the schema);
 3. start the AsyncIOScheduler (cron from COLLECT_CRON) and run one immediate
    collection so the database is not empty after deployment;
 4. serve the FastAPI trigger web UI, which blocks until the process stops.
@@ -19,8 +19,9 @@ import logging
 import uvicorn
 
 from app.config import Settings, load_settings
-from app.database import create_db_engine, create_schema, create_session_factory
+from app.database import create_db_engine, create_session_factory
 from app.logsetup import configure_logging
+from app.migrate import run_migrations
 from app.scheduler import build_scheduler, run_collection
 from app.webui import create_app
 
@@ -30,9 +31,8 @@ INITIAL_JOB_ID = "initial-collection"
 
 
 async def _serve(settings: Settings) -> None:
-    """Create the schema, start the scheduler + immediate run, and serve the UI."""
+    """Start the scheduler + immediate run and serve the UI (schema already migrated)."""
     engine = create_db_engine(settings.database_url)
-    await create_schema(engine)
     session_factory = create_session_factory(engine)
 
     # One shared lock keeps scheduled and web-triggered runs from overlapping.
@@ -68,9 +68,10 @@ async def _serve(settings: Settings) -> None:
 
 
 def main() -> None:
-    """Load config, configure logging, and run the async service."""
+    """Load config, configure logging, migrate the database, and run the service."""
     settings = load_settings()
     configure_logging(settings)
+    run_migrations(settings.database_url)
     asyncio.run(_serve(settings))
 
 

@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 from dotenv import load_dotenv
@@ -28,6 +28,16 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("setup_metabase")
 
 DB_DISPLAY_NAME = "Actian Companion"
+
+
+class Spot(NamedTuple):
+    """One card's placement on a dashboard's 24-column grid."""
+
+    key: str  # references a CARDS entry by its `key`
+    row: int
+    col: int
+    size_x: int
+    size_y: int
 
 # --------------------------------------------------------------------------- #
 # Card definitions. `key` is used for dashboard layout references.
@@ -241,26 +251,26 @@ CARDS: list[dict[str, Any]] = [
     },
 ]
 
-# Dashboards reference cards by key with a 24-column grid layout.
+# Dashboards reference cards by key with a 24-column grid layout (see Spot).
 DASHBOARDS: list[dict[str, Any]] = [
     {
         "name": "Actian Data Intelligence Activity",
         "description": "Example dashboard: catalog editing activity from audit events.",
         "layout": [
-            ("top_contributors", 0, 0, 12, 8),
-            ("top_modified_items", 0, 12, 12, 8),
-            ("weekly_pace", 8, 0, 12, 8),
-            ("events_by_action", 8, 12, 12, 8),
-            ("daily_activity", 16, 0, 24, 8),
+            Spot("top_contributors", 0, 0, 12, 8),
+            Spot("top_modified_items", 0, 12, 12, 8),
+            Spot("weekly_pace", 8, 0, 12, 8),
+            Spot("events_by_action", 8, 12, 12, 8),
+            Spot("daily_activity", 16, 0, 24, 8),
         ],
     },
     {
         "name": "Users & Stewardship",
         "description": "Example dashboard: user population, stewardship and activity.",
         "layout": [
-            ("stewards_breakdown", 0, 0, 8, 8),
-            ("users_by_permission_set", 0, 8, 16, 8),
-            ("top_users_by_logins", 8, 0, 24, 8),
+            Spot("stewards_breakdown", 0, 0, 8, 8),
+            Spot("users_by_permission_set", 0, 8, 16, 8),
+            Spot("top_users_by_logins", 8, 0, 24, 8),
         ],
     },
     {
@@ -268,29 +278,29 @@ DASHBOARDS: list[dict[str, Any]] = [
         "description": "User activity from audit events: most/least active per "
         "rolling week, month and year, plus all users.",
         "layout": [
-            ("mau_top_last 7 days", 0, 0, 12, 8),
-            ("mau_low_last 7 days", 0, 12, 12, 8),
-            ("mau_top_last 30 days", 8, 0, 12, 8),
-            ("mau_low_last 30 days", 8, 12, 12, 8),
-            ("mau_top_last 365 days", 16, 0, 12, 8),
-            ("mau_low_last 365 days", 16, 12, 12, 8),
-            ("mau_all_users", 24, 0, 24, 9),
+            Spot("mau_top_last 7 days", 0, 0, 12, 8),
+            Spot("mau_low_last 7 days", 0, 12, 12, 8),
+            Spot("mau_top_last 30 days", 8, 0, 12, 8),
+            Spot("mau_low_last 30 days", 8, 12, 12, 8),
+            Spot("mau_top_last 365 days", 16, 0, 12, 8),
+            Spot("mau_low_last 365 days", 16, 12, 12, 8),
+            Spot("mau_all_users", 24, 0, 24, 9),
         ],
     },
     {
         "name": "Most Updated Items",
         "description": "Items ranked by number of modifications in the audit trail.",
         "layout": [
-            ("mui_top10", 0, 0, 12, 8),
-            ("mui_table", 0, 12, 12, 9),
+            Spot("mui_top10", 0, 0, 12, 8),
+            Spot("mui_table", 0, 12, 12, 9),
         ],
     },
     {
         "name": "Documentation Coverage per Curator",
         "description": "Per curator: edited managed items / managed items.",
         "layout": [
-            ("dcc_ratio", 0, 0, 24, 8),
-            ("dcc_table", 8, 0, 24, 8),
+            Spot("dcc_ratio", 0, 0, 24, 8),
+            Spot("dcc_table", 8, 0, 24, 8),
         ],
     },
 ]
@@ -458,17 +468,17 @@ def create_dashboard(client: httpx.Client, spec: dict[str, Any], card_ids: dict[
     dashcards = [
         {
             "id": -(idx + 1),
-            "card_id": card_ids[key],
-            "row": row,
-            "col": col,
-            "size_x": size_x,
-            "size_y": size_y,
+            "card_id": card_ids[spot.key],
+            "row": spot.row,
+            "col": spot.col,
+            "size_x": spot.size_x,
+            "size_y": spot.size_y,
             "series": [],
             "parameter_mappings": [],
             "visualization_settings": {},
         }
-        for idx, (key, row, col, size_x, size_y) in enumerate(spec["layout"])
-        if key in card_ids
+        for idx, spot in enumerate(spec["layout"])
+        if spot.key in card_ids
     ]
     resp = client.put(f"/api/dashboard/{dash_id}", json={"dashcards": dashcards})
     resp.raise_for_status()

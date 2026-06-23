@@ -1,0 +1,32 @@
+# Keep the build context (and resulting image) small and secret-free.
+# Build context is ./collector; exclude everything not needed at runtime.
+
+# Virtualenvs / local interpreters (huge; rebuilt inside the image).
+.venv/
+venv/
+env/
+
+# Python caches and artefacts.
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Tooling caches.
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Tests and dev-only deps never run in the runtime image.
+tests/
+requirements-dev.txt
+
+# Secrets / local config -- never bake credentials into an image.
+.env
+*.env
+.env.*
+
+# OS / editor cruft.
+.DS_Store
+.idea/
+.vscode/

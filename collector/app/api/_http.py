@@ -43,6 +43,11 @@ def make_client(
     return httpx.AsyncClient(base_url=base_url, headers=headers, timeout=timeout)
 
 
+def secret_client(base_url: str, api_key: str, timeout: float) -> httpx.AsyncClient:
+    """Async client for the X-API-SECRET JSON APIs (Catalog, User Management)."""
+    return make_client(base_url, secret_headers(api_key, json_body=True), timeout)
+
+
 async def send_json(
     client: httpx.AsyncClient,
     method: str,

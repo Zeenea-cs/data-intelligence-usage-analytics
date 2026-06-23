@@ -161,9 +161,9 @@ docker compose up -d --force-recreate metabase-setup
 # or, from the host:  pip install httpx python-dotenv && python scripts/setup_metabase.py
 ```
 
-On startup the collector creates the database schema from the ORM models (1.0 —
-no migrations), then performs **one immediate collection** (so the database is
-not empty), and thereafter runs on `COLLECT_CRON`.
+On startup the collector runs the Alembic migrations to `head` (creating the
+schema on first boot), then performs **one immediate collection** (so the
+database is not empty), and thereafter runs on `COLLECT_CRON`.
 
 ---
 

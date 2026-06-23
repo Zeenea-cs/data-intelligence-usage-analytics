@@ -22,8 +22,8 @@ demand. Everything runs via Docker Compose.
 
 - Collector: **Python 3.12**, **APScheduler** (cron), **httpx** (async HTTP).
 - Database: **PostgreSQL 16**.
-- ORM: **SQLAlchemy 2.x (async)**. No migration tool — this is a 1.0 with no
-  deployment history, so the schema is created from the ORM metadata at startup.
+- ORM: **SQLAlchemy 2.x (async)** for models; **Alembic** for migrations. The
+  collector runs migrations to `head` at startup (initial schema: `001`).
 - Web UI: **FastAPI** + **uvicorn**, served by the collector process in the same
   asyncio event loop as the scheduler.
 - Reporting: **Metabase** (latest stable Docker image).
@@ -120,11 +120,13 @@ Setup-script-only vars (used by `scripts/setup_metabase.py`, all optional):
 
 ## 4. Data model (PostgreSQL)
 
-The ORM models are the single source of truth; the schema is created from them
-at startup via `Base.metadata.create_all` (1.0 — no migrations). JSONB columns in
-Postgres (use `JSON().with_variant(JSONB, "postgresql")` in models so tests can
-run on SQLite). BIGSERIAL PKs (`BigInteger().with_variant(Integer, "sqlite")`).
-All timestamps `TIMESTAMPTZ` (`DateTime(timezone=True)`).
+The ORM models are the single source of truth; the schema is applied via Alembic
+migrations (initial: `001_initial_schema`), run to `head` at startup by
+`app.migrate.run_migrations`. The migrations must be kept in step with the
+models. JSONB columns in Postgres (use `JSON().with_variant(JSONB, "postgresql")`
+in models so tests can run on SQLite). BIGSERIAL PKs
+(`BigInteger().with_variant(Integer, "sqlite")`). All timestamps `TIMESTAMPTZ`
+(`DateTime(timezone=True)`).
 
 **users**: `id VARCHAR PK`, `username`, `email`, `display_name`,
 `is_steward BOOL`, `roles JSONB`, `attributes JSONB`, `first_seen_at`,
@@ -296,13 +298,14 @@ transaction. Run order each cycle: **users → audit → items**.
     cron job from `COLLECT_CRON` (`CronTrigger.from_crontab`), `coalesce=True`,
     `max_instances=1`.
 - `main.py`:
-  - `_serve(settings)`: create engine; `create_schema(engine)` (build tables
-    from ORM metadata); create session factory + a shared `asyncio.Lock`; build
-    scheduler; add an **immediate one-off job** (runs once at startup so the DB
-    is not empty); start scheduler; run the FastAPI app via
+  - `_serve(settings)`: create engine; create session factory + a shared
+    `asyncio.Lock`; build scheduler; add an **immediate one-off job** (runs once
+    at startup so the DB is not empty); start scheduler; run the FastAPI app via
     `uvicorn.Server(...).serve()` on `WEBUI_HOST:WEBUI_PORT`, which blocks.
-  - `main()`: load settings → configure logging → `asyncio.run(_serve)`.
-- `database.create_schema(engine)` runs `Base.metadata.create_all` (idempotent).
+  - `main()`: load settings → configure logging → `run_migrations` (Alembic to
+    `head`) → `asyncio.run(_serve)`.
+- `migrate.run_migrations(database_url)` upgrades the schema to `head`
+  (idempotent) via Alembic before the service starts.
 
 ---
 

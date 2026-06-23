@@ -21,13 +21,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.api._http import make_client, secret_headers, send_json
+from app.config import DEFAULT_AUDIT_INITIAL_DAYS
 from app.timeutils import iso_millis
 
 AUDIT_PATH = "/public-api/management/audit"
 ITEM_EVENT_TYPE = "Item"
 
-# `from`/`to` are mandatory; default to one year ending now when unspecified.
-DEFAULT_LOOKBACK_DAYS = 365
+# `from`/`to` are mandatory; default to the configured look-back ending now when
+# unspecified (shares the single source of truth in app.config).
+DEFAULT_LOOKBACK_DAYS = DEFAULT_AUDIT_INITIAL_DAYS
 
 
 class AuditClient:

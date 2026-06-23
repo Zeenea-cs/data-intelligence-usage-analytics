@@ -91,6 +91,24 @@ def test_audit_paginates_via_cursormark() -> None:
 
 
 @respx.mock
+def test_audit_lookback_days_sets_from_window() -> None:
+    """lookback_days controls the `from`/`to` span when no `since` is given."""
+    import json
+    from datetime import datetime
+
+    route = respx.post(f"{BASE}/public-api/management/audit").mock(
+        return_value=httpx.Response(200, json=_AUDIT_PAGE2_EMPTY)
+    )
+    client = AuditClient(BASE, "k", lookback_days=30)
+    asyncio.run(_drain(client.iter_item_events()))
+
+    body = json.loads(route.calls[0].request.content)
+    start = datetime.fromisoformat(body["from"].replace("Z", "+00:00"))
+    end = datetime.fromisoformat(body["to"].replace("Z", "+00:00"))
+    assert 29 <= (end - start).days <= 30
+
+
+@respx.mock
 def test_audit_raises_apierror_on_http_500() -> None:
     """A 500 is logged and surfaced as ApiError."""
     respx.post(f"{BASE}/public-api/management/audit").mock(

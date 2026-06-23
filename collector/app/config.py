@@ -22,6 +22,9 @@ REQUIRED_VARS: tuple[str, ...] = (
 
 # Defaults for optional variables.
 DEFAULT_COLLECT_CRON = "0 0 * * *"
+# Number of days of history to request when retrieving audit events (the `from`
+# bound of the Audit API window).
+DEFAULT_AUDIT_INITIAL_DAYS = 365
 DEFAULT_POSTGRES_HOST = "db"
 DEFAULT_POSTGRES_PORT = 5432
 DEFAULT_POSTGRES_DB = "actian_companion"
@@ -46,6 +49,7 @@ class Settings:
     actian_instance_url: str
     actian_api_key: str
     collect_cron: str
+    audit_initial_days: int
     postgres_host: str
     postgres_port: int
     postgres_db: str
@@ -101,6 +105,7 @@ def load_settings() -> Settings:
         actian_instance_url=os.environ["ACTIAN_INSTANCE_URL"].rstrip("/"),
         actian_api_key=os.environ["ACTIAN_API_KEY"],
         collect_cron=os.environ.get("COLLECT_CRON", DEFAULT_COLLECT_CRON),
+        audit_initial_days=_int_env("AUDIT_INITIAL_DAYS", DEFAULT_AUDIT_INITIAL_DAYS),
         postgres_host=os.environ.get("POSTGRES_HOST", DEFAULT_POSTGRES_HOST),
         postgres_port=postgres_port,
         postgres_db=os.environ.get("POSTGRES_DB", DEFAULT_POSTGRES_DB),

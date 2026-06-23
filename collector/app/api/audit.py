@@ -33,10 +33,18 @@ DEFAULT_LOOKBACK_DAYS = 365
 class AuditClient:
     """Reads `Item` audit events, following the API's cursor pagination."""
 
-    def __init__(self, base_url: str, api_key: str, *, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        timeout: float = 30.0,
+        lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
+        self._lookback_days = lookback_days
 
     async def iter_item_events(
         self, *, since: str | None = None, until: str | None = None
@@ -53,7 +61,7 @@ class AuditClient:
         now = datetime.now(timezone.utc)
         body: dict[str, Any] = {
             "eventType": ITEM_EVENT_TYPE,
-            "from": since or iso_millis(now - timedelta(days=DEFAULT_LOOKBACK_DAYS)),
+            "from": since or iso_millis(now - timedelta(days=self._lookback_days)),
             "to": until or iso_millis(now),
         }
 

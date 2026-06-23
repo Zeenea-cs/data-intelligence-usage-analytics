@@ -138,7 +138,7 @@ services:
     environment:
       METABASE_URL: http://metabase:3000
       METABASE_ADMIN_EMAIL: ${METABASE_ADMIN_EMAIL:-admin@actian-companion.local}
-      METABASE_ADMIN_PASSWORD: ${METABASE_ADMIN_PASSWORD:-Actian-Companion-2026}
+      METABASE_ADMIN_PASSWORD: ${METABASE_ADMIN_PASSWORD:-Actian-Companion-2026!}
       METABASE_SITE_NAME: ${METABASE_SITE_NAME:-Actian Data Intelligence Companion}
       POSTGRES_HOST: ${POSTGRES_HOST:-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}

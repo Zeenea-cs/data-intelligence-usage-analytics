@@ -47,8 +47,9 @@ actian-companion/
     app/
       __init__.py
       config.py            # env load + validation (incl. web UI host/port)
-      database.py          # async engine, session factory, schema create, upsert helper
+      database.py          # async engine, session factory, upsert + insert + reinit helpers
       models.py            # SQLAlchemy models (the schema's single source of truth)
+      migrate.py           # run Alembic migrations to head at startup
       timeutils.py         # ISO-8601 parse + format (handles Z + nanoseconds)
       clients.py           # factory bundling the three API clients from Settings
       logsetup.py          # console + rotating-file logging for the collector
@@ -64,14 +65,25 @@ actian-companion/
         users.py
         audit.py
         items.py
-      scheduler.py         # AsyncIOScheduler + collection cycle + run record
-      webui.py             # FastAPI trigger UI
-      main.py              # entrypoint: create schema -> scheduler + uvicorn
+      scheduler.py         # AsyncIOScheduler + collection cycle + incremental + force_reload
+      webui.py             # FastAPI trigger UI (serves static/index.html)
+      main.py              # entrypoint: migrate -> scheduler + immediate run + uvicorn
+      static/
+        index.html         # single-page web UI (collect / force-reload / runs / logs)
+    migrations/
+      env.py               # Alembic env (sync engine; URL from Config or settings)
+      versions/
+        001_initial_schema.py    # users, audit_events, items, collection_runs
+        002_user_snapshots.py    # append-only user_snapshots history
     tests/
       test_config.py  test_models.py  test_api_clients.py
       test_collectors.py  test_scheduler.py  test_items.py  test_webui.py
-    requirements.txt
+    alembic.ini            # Alembic CLI config (startup uses app.migrate instead)
+    pyproject.toml         # pytest (pythonpath/testpaths) + ruff (py312) config
+    requirements.txt       # runtime deps
+    requirements-dev.txt   # dev/test deps (pytest, respx, aiosqlite, ruff)
     Dockerfile
+    .dockerignore          # excludes .venv, tests, caches, secrets from the image
   scripts/
     discover_api.py        # interactive API discovery tool
     setup_metabase.py      # idempotent Metabase provisioning
@@ -94,6 +106,7 @@ raises `RuntimeError` listing every missing required var.
 | `ACTIAN_INSTANCE_URL` | yes | — | Instance base URL, trailing slash stripped |
 | `ACTIAN_API_KEY` | yes | — | API key (header `X-API-SECRET`; Bearer for SCIM) |
 | `COLLECT_CRON` | no | `0 0 * * *` | Collection cron |
+| `AUDIT_INITIAL_DAYS` | no | `365` | Audit look-back (days) for the **initial** backfill; later runs are incremental since the last successful run |
 | `POSTGRES_HOST` | no | `db` | Companion DB host |
 | `POSTGRES_PORT` | no | `5432` | Companion DB port (validated int) |
 | `POSTGRES_DB` | no | `actian_companion` | Companion DB name |
@@ -106,7 +119,7 @@ raises `RuntimeError` listing every missing required var.
 | `LOG_DIR` | no | `/var/log/actian` | Shared log dir (bind-mounted to `./logs`) |
 | `LOG_MAX_BYTES` | no | `5000000` | Collector log rotation size |
 | `LOG_BACKUP_COUNT` | no | `5` | Rotated collector logs kept |
-| `POSTGRES_LOG_MIN_MESSAGES` | no | `warning` | Postgres log verbosity (db services) |
+| `POSTGRES_LOG_MIN_MESSAGES` | no | `warning` | Postgres log verbosity (db services; **compose-only**, not read by `Settings`) |
 
 `Settings` is a frozen dataclass with a `database_url` property returning
 `postgresql+psycopg://USER:PASSWORD@HOST:PORT/DB`.
@@ -114,23 +127,34 @@ raises `RuntimeError` listing every missing required var.
 Setup-script-only vars (used by `scripts/setup_metabase.py`, all optional):
 `METABASE_URL` (`http://localhost:3000`), `METABASE_ADMIN_EMAIL`
 (`admin@actian-companion.local`), `METABASE_ADMIN_PASSWORD`
-(`Actian-Companion-2026`), `METABASE_SITE_NAME`.
+(`Actian-Companion-2026!` — must be strong; Metabase rejects common/short
+passwords), `METABASE_SITE_NAME`.
 
 ---
 
 ## 4. Data model (PostgreSQL)
 
 The ORM models are the single source of truth; the schema is applied via Alembic
-migrations (initial: `001_initial_schema`), run to `head` at startup by
-`app.migrate.run_migrations`. The migrations must be kept in step with the
-models. JSONB columns in Postgres (use `JSON().with_variant(JSONB, "postgresql")`
-in models so tests can run on SQLite). BIGSERIAL PKs
-(`BigInteger().with_variant(Integer, "sqlite")`). All timestamps `TIMESTAMPTZ`
-(`DateTime(timezone=True)`).
+migrations (`001_initial_schema` → `002_user_snapshots`), run to `head` at startup
+by `app.migrate.run_migrations` (it builds an Alembic `Config` pointing at the
+`migrations/` dir and the runtime `database_url`, escaping `%` → `%%`). The
+migrations must be kept in step with the models. JSONB columns in Postgres (use
+`JSON().with_variant(JSONB, "postgresql")` in models so tests can run on SQLite).
+BIGSERIAL PKs (`BigInteger().with_variant(Integer, "sqlite")`). All timestamps
+`TIMESTAMPTZ` (`DateTime(timezone=True)`).
 
 **users**: `id VARCHAR PK`, `username`, `email`, `display_name`,
 `is_steward BOOL`, `roles JSONB`, `attributes JSONB`, `first_seen_at`,
 `last_updated_at`.
+
+**user_snapshots** (migration `002`): an **append-only** history of the user
+export — one row inserted per exported user per run, never updated, so licence
+consumption (stewards vs explorers) can be trended over time. Preserved across
+*Force reload* (like `collection_runs`). Columns: `id BIGSERIAL PK`,
+`snapshot_at TIMESTAMPTZ` (indexed `ix_user_snapshots_snapshot_at`),
+`collection_run_id BIGINT`, `user_id VARCHAR`, `username`, `email`,
+`display_name`, `is_steward BOOL`, `license_type VARCHAR(255)`, `roles JSONB`,
+`attributes JSONB`. No FK (history must survive row deletion in `users`).
 
 **audit_events**: `id BIGSERIAL PK`, `event_id VARCHAR UNIQUE`,
 `user_id VARCHAR FK->users.id`, `username`, `action`, `item_id`, `item_type`,
@@ -144,10 +168,22 @@ in models so tests can run on SQLite). BIGSERIAL PKs
 `status VARCHAR(50)`, `users_collected INT`, `events_collected INT`,
 `items_collected INT`, `error_message TEXT`.
 
-A reusable async `upsert_rows(session, table, rows, index_elements,
-update_columns)` helper performs `INSERT ... ON CONFLICT DO UPDATE`, dispatching
-to the postgresql or sqlite dialect insert by `session.get_bind().dialect.name`.
-Columns not in `update_columns` (e.g. `first_seen_at`) are preserved on conflict.
+`database.py` provides three async write helpers, all running in the caller's
+transaction and chunking rows to stay under each backend's bind-param ceiling
+(postgresql 65000 / sqlite 32000):
+- `upsert_rows(session, table, rows, index_elements, update_columns)` —
+  `INSERT ... ON CONFLICT DO UPDATE`, dispatching to the postgresql or sqlite
+  dialect insert by `session.get_bind().dialect.name`. Columns not in
+  `update_columns` (e.g. `first_seen_at`) are preserved on conflict.
+- `insert_rows(session, table, rows)` — plain append-only bulk INSERT (no
+  conflict handling), used for `user_snapshots`.
+- `reinit_data(session)` — `DELETE` from `audit_events`, `items`, `users` (FK-safe
+  order) for *Force reload*; leaves `collection_runs` and `user_snapshots` intact.
+  `DELETE` (not `TRUNCATE`) so the same path works on SQLite under test.
+
+`session_scope(session_factory)` yields a transactional session (commit on
+success, rollback on error, always closed). The engine is created with
+`pool_pre_ping=True`.
 
 ---
 
@@ -252,6 +288,10 @@ transaction. Run order each cycle: **users → audit → items**.
      permissions/scopes, `License type`, `Creation date`, `Last login`,
      `Logins count`) + SCIM `scimGroups` and `scimActive`.
    - `first_seen_at` set once; `last_updated_at` each run.
+5. After the upsert, append one `user_snapshots` row per exported user via
+   `insert_rows` (immutable history): `snapshot_at` = run time, plus `user_id`,
+   `username`, `email`, `display_name`, `is_steward`, `license_type`
+   (`attributes['License type']`), `roles`, `attributes`. Never updated.
 
 ### 6.2 Audit (`collectors/audit.py`)
 - Build `id -> username` map from the `users` table.
@@ -288,12 +328,24 @@ transaction. Run order each cycle: **users → audit → items**.
 
 - `scheduler.py`:
   - `execute_collection(session_factory, *, users_client, audit_client,
-    catalog_client) -> status`: run the three collectors, each in its own
-    `session_scope`; catch per-collector exceptions (log + continue). Always
-    write a `collection_runs` row with counts. Status = `success` (no errors),
-    `failed` (all failed), else `partial`.
-  - `run_collection(settings, session_factory, lock=None)`: build clients from
-    settings; if a `lock` is given, hold it for the whole cycle.
+    catalog_client, since=None, until=None) -> status`: run the three collectors,
+    each in its own `session_scope`; catch per-collector exceptions (log +
+    continue). `since`/`until` bound the audit window only. Always write a
+    `collection_runs` row with counts. Status = `success` (no errors), `failed`
+    (all failed), else `partial`.
+  - `_incremental_since(session_factory)`: returns the **start time of the most
+    recent `success` run** (`iso_millis`) as the audit `since` bound, or `None`
+    when no successful run exists yet (first start → audit client falls back to
+    the `AUDIT_INITIAL_DAYS` look-back). The upsert dedupes the small overlap.
+  - `run_collection(settings, session_factory, lock=None)`: build clients; compute
+    the incremental `since`; run one cycle. If a `lock` is given, hold it for the
+    whole cycle. Users and items are always full snapshots; only audit is
+    incremental.
+  - `force_reload(settings, session_factory, days, lock=None)`: `reinit_data`
+    (wipe `users`/`items`/`audit_events`) then a full `execute_collection` with
+    the audit window bounded to the last `days` days (`since = now - days`).
+    `collection_runs` and `user_snapshots` history is preserved. Holds `lock` when
+    given.
   - `build_scheduler(settings, session_factory, lock)`: `AsyncIOScheduler` with a
     cron job from `COLLECT_CRON` (`CronTrigger.from_crontab`), `coalesce=True`,
     `max_instances=1`.
@@ -311,18 +363,28 @@ transaction. Run order each cycle: **users → audit → items**.
 
 ## 8. Web UI (`webui.py`, FastAPI)
 
-`create_app(settings, session_factory, lock)` returns a FastAPI app:
-- `GET /` → an HTML page: a **“Run collection now”** button, an auto-refreshing
-  table of the last 20 `collection_runs`, and a **per-service log viewer**
-  (service picker + tail).
-- `POST /api/collect` → if `lock.locked()` return **409** (`already running`);
-  else launch `run_collection(settings, session_factory, lock)` as a background
-  task and return **202**. The shared lock guarantees manual and cron runs never
-  overlap.
+`create_app(settings, session_factory, lock)` returns a FastAPI app. The page is
+served from `app/static/index.html` (a single self-contained file), with the
+`__INSTANCE_URL__` placeholder substituted (HTML-escaped) once at app-build time.
+The page polls `/api/runs` every 5 s; the log view auto-refreshes optionally.
+- `GET /` → the page: a **“Run collection now”** button, a **“Force reload
+  history”** button with a *days* number input (JS-confirmed, destructive), an
+  auto-refreshing table of the last 20 `collection_runs`, and a **per-service log
+  viewer** (service picker + line count + tail).
+- `POST /api/collect` → if `lock.locked()` return **409**; else launch
+  `run_collection(...)` as a background task (`asyncio.ensure_future`, reference
+  held in `app.state.tasks`) and return **202**.
+- `POST /api/reload` → body `{"days": N}`. Reject non-positive-int `days` with
+  **400**; if `lock.locked()` return **409**; else launch `force_reload(...,
+  days, lock)` and return **202**.
 - `GET /api/runs` → last 20 runs as JSON.
 - `GET /api/logs/services` → services that have a log file in `LOG_DIR`.
 - `GET /api/logs/{service}?lines=N` → tail of that service's log (plain text;
-  404 if unknown). A fixed service→filename map prevents path traversal.
+  404 if unknown). A fixed service→filename map (`logs.py`,
+  `collector`/`db`/`metabase`/`metabase-db`) prevents path traversal; `lines`
+  clamped to [1, 2000].
+
+The shared `asyncio.Lock` guarantees manual, reload and cron runs never overlap.
 
 **Per-service logging:** every service writes a log file into the shared
 `LOG_DIR` (bind-mounted to `./logs`): the collector via a `RotatingFileHandler`
@@ -335,18 +397,31 @@ writable by the container users (`chmod 777 logs`).
 
 ## 9. Docker Compose
 
-Four services, all env from `.env`:
-1. `db` — postgres:16, named volume, healthcheck (`pg_isready`).
+Five services, all env from `.env`:
+1. `db` — postgres:16, named volume, healthcheck (`pg_isready`). Publishes 5432.
+   Runs with `logging_collector` flags writing `db.log` (daily truncation,
+   verbosity = `POSTGRES_LOG_MIN_MESSAGES`).
 2. `collector` — built from `collector/Dockerfile`, `depends_on db (healthy)`,
    `restart: unless-stopped`, **publish port 8000** (web UI). Gets all
-   `ACTIAN_*`, `POSTGRES_*`, `METABASE_DB_PASSWORD`, `LOG_LEVEL`, `WEBUI_PORT`.
-3. `metabase` — metabase/metabase:latest, port 3000, uses `metabase-db`.
-4. `metabase-db` — a second postgres:16 for Metabase's app data (separate DB),
-   named volume, healthcheck.
+   `ACTIAN_*` (incl. `AUDIT_INITIAL_DAYS`), `POSTGRES_*`, `METABASE_DB_PASSWORD`,
+   `LOG_LEVEL`, `LOG_DIR`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT`, `WEBUI_PORT`.
+3. `metabase-db` — a second postgres:16 for Metabase's app data (separate
+   `metabase` DB/user), named volume, healthcheck. Same `logging_collector` flags
+   → `metabase-db.log`.
+4. `metabase` — metabase/metabase:latest, port 3000, `depends_on db + metabase-db
+   (healthy)`. `MB_DB_*` point at `metabase-db`. Entry-point tees stdout to
+   `metabase.log`.
+5. `metabase-setup` — **one-shot** job (`restart: "no"`) that **reuses the
+   collector image** and runs `python /scripts/setup_metabase.py` (scripts
+   bind-mounted read-only), `depends_on metabase (started)`. `METABASE_URL` =
+   `http://metabase:3000`. The script self-waits on health and is idempotent, so
+   it re-runs harmlessly on every `up` and exits 0. This is how Metabase is
+   provisioned automatically — no manual step required.
 
-All services bind-mount `./logs` → `LOG_DIR` so each can write its log file and
-the collector can tail them. The two Postgres services run with
-`logging_collector` flags; Metabase tees stdout to `metabase.log`.
+The first four services bind-mount `./logs` → `LOG_DIR` so each writes its log
+file and the collector can tail them. The two Postgres services run with
+`logging_collector` flags; Metabase tees stdout to `metabase.log`. The host
+`./logs` dir must be writable by the container users (`chmod 777 logs`).
 
 Dockerfile: `python:3.12-slim`, install `requirements.txt`, copy app,
 `CMD ["python","-m","app.main"]`.
@@ -355,33 +430,43 @@ Dockerfile: `python:3.12-slim`, install `requirements.txt`, copy app,
 
 ## 10. Metabase provisioning (`scripts/setup_metabase.py`)
 
-Idempotent. Steps: poll `/api/health`; complete the setup wizard if
-`has-user-setup` is false (else log in); **remove the default example assets**
-(Sample Database, the *E-commerce Insights* dashboard, the *Examples*
-collection); add a postgres database connection to `actian_companion` (the `db`
-service); create-or-update saved questions (cards) by name (PUT so SQL changes
-propagate); build dashboards via `PUT /api/dashboard/:id` with a `dashcards`
-layout (Metabase v0.62 shape). Branch on `has-user-setup` (not the setup token,
-which persists after setup).
+Idempotent. **Run automatically by the `metabase-setup` compose service** (and
+runnable by hand). Steps: poll `/api/health`; complete the setup wizard if
+`has-user-setup` is false (else log in, storing `X-Metabase-Session`); **remove
+the default example assets** (delete the Sample Database, archive the *E-commerce
+Insights* dashboard and the *Examples* collection); add a postgres database
+connection named "Actian Companion" to `actian_companion` (host/port/db/user/pwd
+from `POSTGRES_*`); create-or-update saved questions (cards) by name (PUT existing
+so SQL/display changes propagate but the card id stays stable for dashboards);
+build dashboards via `PUT /api/dashboard/:id` with a `dashcards` 24-column grid
+layout (negative temp ids; Metabase v0.62 shape). Branch on `has-user-setup` (not
+the setup token, which persists after setup).
 
 All audit-based card SQL filters `user_id IS NOT NULL` so events not linked to a
 known user are excluded from the statistics.
 
-Create at least these cards and five example dashboards:
-- **Activity** — Top Contributors (30d), Top Modified Items (30d), Weekly
-  Documentation Pace, Events by Action, Daily Activity (30d).
-- **Users & Stewardship** — Stewards vs Non-stewards, Users by Permission Set,
-  Most Active Users (by login count = `attributes->>'Logins count'`).
+Create the cards below and **six example dashboards** (cards reference each card
+by a `key`; SQL runs against `audit_events`, `users`, `items`, `user_snapshots`):
+- **Actian Data Intelligence Activity** — Top Contributors (30d), Top Modified
+  Items (30d, `item_type` joined from `items`), Weekly Documentation Pace, Events
+  by Action, Daily Activity (30d).
+- **Users & Stewardship** — Stewards vs Non-stewards (pie), Users by Permission
+  Set (`roles->>'name'`), Most Active Users by login count
+  (`attributes->>'Logins count'`).
 - **Most Active Users** — most/least active users (top-10) for rolling 7/30/365-day
   windows (activity = count of `audit_events` by known `user_id` joined to
-  `users`; least-active ranked among users with ≥1 event), plus an all-users
-  all-time activity table.
-- **Most Updated Items** — top-10 items by modification count + a detail table.
+  `users`; least-active ranked among users with ≥1 event), plus an *All Users —
+  Activity Summary* all-time table.
+- **Most Updated Items** — top-10 items by modification count + a detail table
+  (type from `items`, count, last modified).
 - **Documentation Coverage per Curator** — `coverage_ratio = (managed items the
-  curator has an edit event on) / (items the curator manages)`, where managed =
-  `items.owner_id` is the curator and an edit = an `audit_events` row with that
-  `user_id` and `item_id`.
-SQL runs against `audit_events`, `users` and `items`.
+  curator has an `UpdateItem` event on) / (items the curator manages)`, where
+  managed = `items.owner_id` is the curator. Bar (ratio) + detail table
+  (managed / edited / ratio).
+- **Actian Data Intelligence Licence consumption** — three scalar cards
+  (**Stewards** `is_steward`, **Explorers** `NOT is_steward`, **Total Users**) +
+  *Licence Consumption Over Time* trend (one point per day from `user_snapshots`,
+  `DISTINCT ON` the latest snapshot of each day; lines for stewards/explorers/total).
 
 ---
 
@@ -411,7 +496,11 @@ SQLite engine (StaticPool) for DB tests. Cover:
   (owner from curators, description_type) + incremental skip of fresh items.
 - Scheduler: `execute_collection` writes a run row (success) and marks `partial`
   on a collector failure.
-- Web UI: `GET /` and `GET /api/runs`; `POST /api/collect` returns 202.
+- Web UI: `GET /` and `GET /api/runs`; `POST /api/collect` returns 202;
+  `POST /api/reload` validates `days` (400 on missing/0/non-int), launches
+  `force_reload` on a valid count (202), and returns 409 when the lock is held
+  (both collect and reload); `GET /api/logs/services` lists only existing files
+  and `/api/logs/{service}` tails.
 
 All code passes `ruff check` with no errors.
 
@@ -419,12 +508,19 @@ All code passes `ruff check` with no errors.
 
 ## 13. README & secrets
 
-README must cover: prerequisites; quick start (`cp .env.example .env` → fill 4
-required → `docker compose up -d` → wait → `pip install httpx python-dotenv` →
-`python scripts/setup_metabase.py`); config reference; Metabase access
-(localhost:3000) and the dashboards; collector logs; **manual collection via the
-web UI (localhost:8000)**; known limitations (deleted catalog items can't be
-enriched and are re-checked each run; audit Item-only; per-API auth differs).
+README must cover: an **"as is / not an official Actian product" disclaimer**;
+prerequisites; quick start (`cp .env.example .env` → fill the 4 required + a
+**strong** `METABASE_ADMIN_PASSWORD` → `mkdir -p logs && chmod 777 logs` →
+`docker compose up -d` → wait). Metabase is provisioned **automatically** by the
+`metabase-setup` service (re-runnable with `docker compose up -d --force-recreate
+metabase-setup`, or by hand via `pip install httpx python-dotenv && python
+scripts/setup_metabase.py`). Also: config reference; Metabase access
+(localhost:3000) and the six dashboards; collector logs; the web UI
+(localhost:8000) with **Run collection now** (incremental) and **Force reload
+history** (destructive, wipes data + reloads N days, keeps run/snapshot history),
+plus their `POST /api/collect` / `POST /api/reload` endpoints; known limitations
+(deleted catalog items can't be enriched and are re-checked each run; audit
+Item-only; per-API auth differs). Architecture diagrams (mermaid) are a plus.
 
 `.gitignore` must exclude `.env` (commit only `.env.example`), `.venv/`,
 `__pycache__/`, caches. Never commit real credentials.
@@ -441,5 +537,10 @@ enriched and are re-checked each run; audit Item-only; per-API auth differs).
   duplicate `event_id`; items enriched (id, key, name, type, description +
   type, owner id/name/email where a curator exists, catalog last-updated);
   steward flag from License type.
-- Web UI at :8000 triggers a run (202) and rejects overlap (409).
-- `setup_metabase.py` is idempotent and builds the two dashboards.
+- Audit collection is incremental (since the last `success` run; first run uses
+  `AUDIT_INITIAL_DAYS`); each run also appends `user_snapshots` rows.
+- Web UI at :8000 triggers a run (202) and rejects overlap (409); **Force reload**
+  validates `days` (400) and wipes+reloads while keeping `collection_runs` and
+  `user_snapshots`.
+- `setup_metabase.py` is idempotent and builds the six dashboards; the
+  `metabase-setup` compose service runs it automatically and exits 0.

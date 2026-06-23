@@ -210,7 +210,7 @@ Used only by `scripts/setup_metabase.py` (all optional, with defaults):
 |---|---|---|
 | `METABASE_URL` | Base URL the setup script targets | `http://localhost:3000` |
 | `METABASE_ADMIN_EMAIL` | Admin account created/used by the script | `admin@actian-companion.local` |
-| `METABASE_ADMIN_PASSWORD` | Admin password (use a strong value) | `Actian-Companion-2026` |
+| `METABASE_ADMIN_PASSWORD` | Admin password (use a strong value) | `Actian-Companion-2026!` |
 | `METABASE_SITE_NAME` | Metabase site name | `Actian Data Intelligence Companion` |
 
 ---
@@ -231,7 +231,7 @@ runs, **removes Metabase's default example assets** (Sample Database, the
 Default admin login (override via `.env` — see §3):
 
 - email `admin@actian-companion.local`
-- password `Actian-Companion-2026`
+- password `Actian-Companion-2026!`
 
 > Change `METABASE_ADMIN_PASSWORD` in `.env` before running in any shared
 > environment.

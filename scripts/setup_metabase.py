@@ -8,7 +8,7 @@ dashboards for users to build on. Safe to re-run.
 Configuration (env / .env, with safe defaults):
     METABASE_URL            default http://localhost:3000
     METABASE_ADMIN_EMAIL    default admin@actian-companion.local
-    METABASE_ADMIN_PASSWORD default Actian-Companion-2026
+    METABASE_ADMIN_PASSWORD default Actian-Companion-2026!
     METABASE_SITE_NAME      default Actian Data Intelligence Companion
     POSTGRES_HOST/PORT/DB/USER/PASSWORD  (companion DB; same vars as the collector)
 """
@@ -550,7 +550,7 @@ def main() -> None:
     load_dotenv()
     base_url = _env("METABASE_URL", "http://localhost:3000")
     email = _env("METABASE_ADMIN_EMAIL", "admin@actian-companion.local")
-    password = _env("METABASE_ADMIN_PASSWORD", "Actian-Companion-2026")
+    password = _env("METABASE_ADMIN_PASSWORD", "Actian-Companion-2026!")
     site_name = _env("METABASE_SITE_NAME", "Actian Data Intelligence Companion")
 
     with httpx.Client(base_url=base_url, timeout=60.0) as client:

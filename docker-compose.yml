@@ -119,6 +119,32 @@ services:
       MB_DB_PASS: ${METABASE_DB_PASSWORD:?METABASE_DB_PASSWORD is required}
       MB_DB_HOST: metabase-db
 
+  # One-shot job: provisions the Metabase dashboard automatically on first start.
+  # Reuses the collector image (it already has httpx + python-dotenv); the setup
+  # script is idempotent and polls Metabase health, so it self-waits and is safe
+  # to re-run on every `up`. Exits 0 when done.
+  metabase-setup:
+    build:
+      context: ./collector
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      metabase:
+        condition: service_started
+    volumes:
+      - ./scripts:/scripts:ro
+    command: ["python", "/scripts/setup_metabase.py"]
+    environment:
+      METABASE_URL: http://metabase:3000
+      METABASE_ADMIN_EMAIL: ${METABASE_ADMIN_EMAIL:-admin@actian-companion.local}
+      METABASE_ADMIN_PASSWORD: ${METABASE_ADMIN_PASSWORD:-Actian-Companion-2026}
+      METABASE_SITE_NAME: ${METABASE_SITE_NAME:-Actian Data Intelligence Companion}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-actian_companion}
+      POSTGRES_USER: ${POSTGRES_USER:-actian}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+
 volumes:
   db_data:
   metabase_db_data:

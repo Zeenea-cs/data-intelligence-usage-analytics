@@ -115,8 +115,9 @@ erDiagram
 - **Docker Compose v2** (`docker compose ...`)
 - A valid **Actian/Zeenea instance URL** and **API key** with read access to the
   Audit, Catalog, User Management and SCIM APIs.
-- Python 3.12 on the host **only** to run `scripts/setup_metabase.py` (optional;
-  everything else runs in containers).
+- Everything runs in containers. Python 3.12 on the host is needed **only** if
+  you want to run `scripts/setup_metabase.py` by hand; the stack runs it
+  automatically (see below).
 
 ---
 
@@ -127,6 +128,8 @@ erDiagram
 cp .env.example .env
 #    Edit .env and set the four REQUIRED values:
 #      ACTIAN_INSTANCE_URL, ACTIAN_API_KEY, POSTGRES_PASSWORD, METABASE_DB_PASSWORD
+#    Also set a STRONG METABASE_ADMIN_PASSWORD -- Metabase rejects common/short
+#    passwords, which would fail the automatic dashboard setup.
 
 # 2. Prepare the shared log directory (all services write their logs here;
 #    open perms let the Postgres/Metabase container users write to it)
@@ -140,11 +143,22 @@ docker compose up -d
 #    boot. Watch readiness:
 docker compose ps
 docker compose logs -f collector   # Ctrl-C to stop following
+```
 
-# 5. Configure Metabase (database connection, saved questions, dashboards)
-#    The script needs two libraries on the host:
-pip install httpx python-dotenv
-python scripts/setup_metabase.py
+Metabase is configured **automatically**: the one-shot `metabase-setup` service
+waits for Metabase to be healthy, then connects the `actian_companion` database
+and creates the saved questions and dashboards. It is idempotent and re-runs
+harmlessly on every `docker compose up`. Watch it with:
+
+```bash
+docker compose logs metabase-setup
+```
+
+To re-run it on demand (or after editing the script):
+
+```bash
+docker compose up -d --force-recreate metabase-setup
+# or, from the host:  pip install httpx python-dotenv && python scripts/setup_metabase.py
 ```
 
 On startup the collector creates the database schema from the ORM models (1.0 —

@@ -105,7 +105,20 @@ erDiagram
     int events_collected
     int items_collected
   }
+  user_snapshots {
+    bigint id PK
+    timestamptz snapshot_at
+    string user_id
+    bool is_steward
+    string license_type
+  }
 ```
+
+`user_snapshots` is an **append-only** history: every collection run inserts one
+row per exported user, stamped with `snapshot_at`. Unlike `users` (upserted, one
+live row per user), it is never updated, so licence consumption (stewards vs
+explorers) can be trended over time. It is preserved across *Force reload* (like
+`collection_runs`).
 
 ---
 
@@ -223,7 +236,7 @@ Default admin login (override via `.env` — see §3):
 > Change `METABASE_ADMIN_PASSWORD` in `.env` before running in any shared
 > environment.
 
-The script creates **five example dashboards** for users to build on:
+The script creates **six example dashboards** for users to build on:
 
 **Actian Data Intelligence Activity** (audit-event activity)
 - Top Contributors (last 30 days), Top Modified Items (last 30 days), Weekly
@@ -246,6 +259,11 @@ The script creates **five example dashboards** for users to build on:
 - Per curator, a coverage ratio = *managed items the curator has edited* ÷
   *items the curator manages* (managed = the item's curator). Bar + detail table
   (managed / edited / ratio).
+
+**Actian Data Intelligence Licence consumption** (licence usage)
+- Three single-number cards — **Stewards** (`is_steward = true`), **Explorers**
+  (`is_steward = false`) and **Total Users** (the sum) — plus a *Licence
+  Consumption Over Time* trend (one point per day from `user_snapshots`).
 
 ### Example dashboards
 
@@ -316,6 +334,7 @@ The collector serves a small web UI at <http://localhost:8000>:
 | Audit window | since last successful run (first run: `AUDIT_INITIAL_DAYS`) | the *days* value you pass |
 | Users / items | refreshed (upsert) | wiped, then re-collected (full snapshot) |
 | `collection_runs` | appended | appended (history preserved) |
+| `user_snapshots` | appended | appended (history preserved) |
 | API | `POST /api/collect` | `POST /api/reload` |
 
 ```

@@ -36,11 +36,12 @@ def test_item_and_collection_run_tables() -> None:
     assert CollectionRun.__tablename__ == "collection_runs"
 
 
-def test_all_four_tables_registered() -> None:
-    """Base metadata registers exactly the four documented tables."""
+def test_all_tables_registered() -> None:
+    """Base metadata registers exactly the documented tables."""
     assert set(Base.metadata.tables.keys()) == {
         "users",
         "audit_events",
         "items",
         "collection_runs",
+        "user_snapshots",
     }

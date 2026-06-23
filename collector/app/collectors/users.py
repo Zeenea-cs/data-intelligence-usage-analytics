@@ -20,8 +20,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.users import UsersClient
-from app.database import upsert_rows
-from app.models import User
+from app.database import insert_rows, upsert_rows
+from app.models import User, UserSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -150,5 +150,25 @@ async def collect_users(session: AsyncSession, client: UsersClient) -> int:
         index_elements=["id"],
         update_columns=_UPDATE_COLUMNS,
     )
+
+    # Append an immutable snapshot of this export so licence consumption can be
+    # trended over time. One row per exported user, stamped with the run time;
+    # never updated (preserved across Force reload).
+    snapshot_rows = [
+        {
+            "snapshot_at": now,
+            "user_id": row["id"],
+            "username": row["username"],
+            "email": row["email"],
+            "display_name": row["display_name"],
+            "is_steward": row["is_steward"],
+            "license_type": (row["attributes"] or {}).get("License type"),
+            "roles": row["roles"],
+            "attributes": row["attributes"],
+        }
+        for row in db_rows
+    ]
+    await insert_rows(session, UserSnapshot.__table__, snapshot_rows)
+
     logger.info("Collected %s users", count)
     return count

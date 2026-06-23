@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.collectors.audit import collect_audit_events
 from app.collectors.users import collect_users, is_steward
-from app.models import AuditEvent, Base, User
+from app.models import AuditEvent, Base, User, UserSnapshot
 from app.timeutils import parse_iso_timestamp
 
 
@@ -213,6 +213,53 @@ async def _run_collect_users_idempotent() -> None:
     await engine.dispose()
 
 
+def test_collect_users_appends_snapshot_each_run() -> None:
+    asyncio.run(_run_collect_users_snapshots())
+
+
+async def _run_collect_users_snapshots() -> None:
+    engine = await _make_engine()
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    client = FakeUsersClient(
+        export_rows=[
+            _export_row("u-admin", "admin@x.com", "66666666", "Steward"),
+            _export_row("u-expl", "expl@x.com", "cec5c187", "Explorer"),
+        ],
+        permission_sets=_PERMISSION_SETS,
+        scim_users=_SCIM_USERS,
+    )
+
+    # Two runs: users table stays at 2 rows (upsert); snapshots accumulate.
+    async with factory() as session:
+        await collect_users(session, client)
+        await session.commit()
+    async with factory() as session:
+        await collect_users(session, client)
+        await session.commit()
+
+    async with factory() as session:
+        users = await session.scalar(select(func.count()).select_from(User))
+        snaps = await session.scalar(select(func.count()).select_from(UserSnapshot))
+        stewards = await session.scalar(
+            select(func.count())
+            .select_from(UserSnapshot)
+            .where(UserSnapshot.is_steward)
+        )
+        admin_snap = (
+            await session.execute(
+                select(UserSnapshot).where(UserSnapshot.user_id == "u-admin").limit(1)
+            )
+        ).scalar_one()
+
+    assert users == 2  # upserted live rows
+    assert snaps == 4  # 2 users x 2 runs, append-only
+    assert stewards == 2  # one steward per run
+    assert admin_snap.license_type == "Steward"
+    assert admin_snap.snapshot_at is not None
+
+    await engine.dispose()
+
+
 # --------------------------------------------------------------------------- #
 # Audit collector
 # --------------------------------------------------------------------------- #
@@ -393,7 +440,7 @@ async def _run_upsert_rows_chunks_large_batches() -> None:
 
 
 def test_reinit_data_clears_data_keeps_runs() -> None:
-    """reinit_data empties users/items/audit_events but keeps collection_runs."""
+    """reinit_data empties users/items/audit_events but keeps runs + snapshots."""
     asyncio.run(_run_reinit_data())
 
 
@@ -414,6 +461,7 @@ async def _run_reinit_data() -> None:
             AuditEvent(event_id="e1", action="CreateItem", occurred_at=now, collected_at=now)
         )
         session.add(CollectionRun(started_at=now, finished_at=now, status="success"))
+        session.add(UserSnapshot(snapshot_at=now, user_id="u1", is_steward=False))
         await session.commit()
 
     async with factory() as session:
@@ -424,8 +472,9 @@ async def _run_reinit_data() -> None:
         assert await session.scalar(select(func.count()).select_from(User)) == 0
         assert await session.scalar(select(func.count()).select_from(Item)) == 0
         assert await session.scalar(select(func.count()).select_from(AuditEvent)) == 0
-        # Run history is preserved.
+        # Run history and snapshot history are preserved.
         assert await session.scalar(select(func.count()).select_from(CollectionRun)) == 1
+        assert await session.scalar(select(func.count()).select_from(UserSnapshot)) == 1
 
     await engine.dispose()
 

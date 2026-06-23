@@ -179,6 +179,54 @@ CARDS: list[dict[str, Any]] = [
         ),
         "viz": {},
     },
+    # --- "Licence consumption" report ------------------------------------ #
+    # Live counts from the users table. Steward = License type "Steward";
+    # Explorer = everyone else (is_steward = false).
+    {
+        "key": "licence_stewards",
+        "name": "Stewards",
+        "display": "scalar",
+        "sql": "SELECT COUNT(*) AS stewards FROM users WHERE is_steward",
+        "viz": {},
+    },
+    {
+        "key": "licence_explorers",
+        "name": "Explorers",
+        "display": "scalar",
+        "sql": "SELECT COUNT(*) AS explorers FROM users WHERE NOT is_steward",
+        "viz": {},
+    },
+    {
+        "key": "licence_total",
+        "name": "Total Users",
+        "display": "scalar",
+        "sql": "SELECT COUNT(*) AS total_users FROM users",
+        "viz": {},
+    },
+    {
+        # Trend from the append-only user_snapshots history. One point per day,
+        # using the latest snapshot of each day (DISTINCT ON the max run time).
+        "key": "licence_trend",
+        "name": "Licence Consumption Over Time",
+        "display": "line",
+        "sql": (
+            "WITH per_run AS ("
+            " SELECT snapshot_at, "
+            " COUNT(*) FILTER (WHERE is_steward) AS stewards, "
+            " COUNT(*) FILTER (WHERE NOT is_steward) AS explorers, "
+            " COUNT(*) AS total "
+            " FROM user_snapshots GROUP BY snapshot_at), "
+            "daily AS ("
+            " SELECT DISTINCT ON (DATE_TRUNC('day', snapshot_at)) "
+            " DATE_TRUNC('day', snapshot_at) AS day, stewards, explorers, total "
+            " FROM per_run ORDER BY DATE_TRUNC('day', snapshot_at), snapshot_at DESC) "
+            "SELECT day, stewards, explorers, total FROM daily ORDER BY day"
+        ),
+        "viz": {
+            "graph.dimensions": ["day"],
+            "graph.metrics": ["stewards", "explorers", "total"],
+        },
+    },
     # --- "Most Updated Items" report ------------------------------------- #
     {
         "key": "mui_top10",
@@ -285,6 +333,17 @@ DASHBOARDS: list[dict[str, Any]] = [
             Spot("mau_top_last 365 days", 16, 0, 12, 8),
             Spot("mau_low_last 365 days", 16, 12, 12, 8),
             Spot("mau_all_users", 24, 0, 24, 9),
+        ],
+    },
+    {
+        "name": "Actian Data Intelligence Licence consumption",
+        "description": "Licence usage: stewards, explorers (non-stewards) and "
+        "total users, plus consumption trend over time.",
+        "layout": [
+            Spot("licence_stewards", 0, 0, 8, 4),
+            Spot("licence_explorers", 0, 8, 8, 4),
+            Spot("licence_total", 0, 16, 8, 4),
+            Spot("licence_trend", 4, 0, 24, 8),
         ],
     },
     {

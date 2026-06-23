@@ -76,12 +76,45 @@ async def reinit_data(session: AsyncSession) -> None:
     action so a reload fully replaces existing rows rather than upserting onto
     them. ``DELETE`` (not ``TRUNCATE``) keeps the same code path working on both
     PostgreSQL and the SQLite test engine. Runs in the caller's transaction.
+
+    ``user_snapshots`` (like ``collection_runs``) is intentionally preserved so a
+    reload never destroys the licence-consumption trend history.
     """
     # Imported here to avoid a circular import (models imports nothing from here).
     from app.models import AuditEvent, Item, User
 
     for model in (AuditEvent, Item, User):
         await session.execute(delete(model))
+
+
+async def insert_rows(
+    session: AsyncSession,
+    table: Table,
+    rows: Sequence[dict[str, Any]],
+) -> int:
+    """Bulk INSERT rows (append-only, no conflict handling).
+
+    Used for history tables such as ``user_snapshots`` where every run appends
+    fresh rows rather than upserting. Chunks rows to stay under the backend's
+    bind-parameter limit, mirroring ``upsert_rows``. Runs in the caller's
+    transaction. Returns the number of rows inserted.
+    """
+    if not rows:
+        return 0
+
+    dialect = session.get_bind().dialect.name
+    if dialect not in _MAX_BIND_PARAMS:
+        raise RuntimeError(f"insert_rows does not support dialect {dialect!r}")
+
+    columns_per_row = max(len(row) for row in rows) or 1
+    chunk_size = max(1, _MAX_BIND_PARAMS[dialect] // columns_per_row)
+
+    total = 0
+    rows_iter = iter(rows)
+    while chunk := list(islice(rows_iter, chunk_size)):
+        await session.execute(table.insert().values(chunk))
+        total += len(chunk)
+    return total
 
 
 async def upsert_rows(

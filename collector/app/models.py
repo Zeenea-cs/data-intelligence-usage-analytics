@@ -62,6 +62,32 @@ class User(Base):
     last_updated_at: Mapped[datetime | None] = mapped_column(_TZ)
 
 
+class UserSnapshot(Base):
+    """An append-only snapshot of one user as seen in a single export run.
+
+    Maps to the `user_snapshots` table. Unlike `users` (upserted, one live row
+    per user), this table is never updated: every collection run inserts a fresh
+    row per exported user, stamped with `snapshot_at`. This preserves the full
+    user export over time so licence consumption trends (stewards vs explorers)
+    can be analysed historically. Preserved across "Force reload" (like
+    `collection_runs`).
+    """
+
+    __tablename__ = "user_snapshots"
+
+    id: Mapped[int] = mapped_column(_BIGINT_PK, primary_key=True, autoincrement=True)
+    snapshot_at: Mapped[datetime | None] = mapped_column(_TZ, index=True)
+    collection_run_id: Mapped[int | None] = mapped_column(_BIGINT_PK)
+    user_id: Mapped[str | None] = mapped_column(String(255))
+    username: Mapped[str | None] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    is_steward: Mapped[bool] = mapped_column(Boolean, default=False)
+    license_type: Mapped[str | None] = mapped_column(String(255))
+    roles: Mapped[Any | None] = mapped_column(_JSONB)
+    attributes: Mapped[Any | None] = mapped_column(_JSONB)
+
+
 class AuditEvent(Base):
     """A single audit event from the Audit API.
 

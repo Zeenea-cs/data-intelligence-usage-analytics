@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.audit import AuditClient
@@ -102,18 +103,45 @@ async def execute_collection(
     return status
 
 
+async def _incremental_since(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> str | None:
+    """Return the audit `since` bound for an incremental run, or None.
+
+    Uses the start time of the most recent **successful** collection run, so a
+    regular run only fetches audit events since the last good cycle (the upsert
+    dedupes the small overlap). Returns None when no successful run exists yet
+    (e.g. first start), letting the audit client fall back to its configured
+    AUDIT_INITIAL_DAYS look-back for the initial backfill.
+    """
+    async with session_factory() as session:
+        last_started = await session.scalar(
+            select(func.max(CollectionRun.started_at)).where(
+                CollectionRun.status == "success"
+            )
+        )
+    return iso_millis(last_started) if last_started else None
+
+
 async def run_collection(
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
     lock: asyncio.Lock | None = None,
 ) -> str:
-    """Build the API clients from config and run one collection cycle.
+    """Build the API clients from config and run one incremental collection cycle.
 
+    Audit events are fetched since the last successful run (full AUDIT_INITIAL_DAYS
+    look-back on the very first run); users and items are always full snapshots.
     When ``lock`` is provided it is held for the whole cycle, so a manual
     (web-triggered) run and the scheduled run never overlap. Returns the run
     status.
     """
     clients = build_clients(settings)
+    since = await _incremental_since(session_factory)
+    if since:
+        logger.info("Incremental collection: audit events since %s", since)
+    else:
+        logger.info("No prior successful run; using AUDIT_INITIAL_DAYS look-back")
 
     async def _go() -> str:
         return await execute_collection(
@@ -121,6 +149,7 @@ async def run_collection(
             users_client=clients.users,
             audit_client=clients.audit,
             catalog_client=clients.catalog,
+            since=since,
         )
 
     # The optional lock serialises manual (web) and scheduled runs.

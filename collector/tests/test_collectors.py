@@ -483,6 +483,44 @@ async def _run_force_reload() -> None:
     await engine.dispose()
 
 
+def test_incremental_since_uses_last_successful_run() -> None:
+    """_incremental_since returns the latest successful run start, else None."""
+    asyncio.run(_run_incremental_since())
+
+
+async def _run_incremental_since() -> None:
+    from datetime import datetime, timezone
+
+    from app.models import CollectionRun
+    from app.scheduler import _incremental_since
+
+    engine = await _make_engine()
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # No runs yet -> None (first run falls back to the configured look-back).
+    assert await _incremental_since(factory) is None
+
+    older = datetime(2026, 6, 20, 8, 0, tzinfo=timezone.utc)
+    newer = datetime(2026, 6, 22, 9, 30, tzinfo=timezone.utc)
+    future_fail = datetime(2026, 6, 23, 9, 30, tzinfo=timezone.utc)
+    async with factory() as session:
+        session.add(CollectionRun(started_at=older, finished_at=older, status="success"))
+        session.add(CollectionRun(started_at=newer, finished_at=newer, status="success"))
+        # A later FAILED run must be ignored (would otherwise skip events).
+        session.add(
+            CollectionRun(started_at=future_fail, finished_at=future_fail, status="failed")
+        )
+        await session.commit()
+
+    since = await _incremental_since(factory)
+    assert since is not None
+    # Returns the most recent *successful* run (2026-06-22), not the older success
+    # nor the later FAILED run (2026-06-23, which would skip events).
+    assert since.startswith("2026-06-22")
+
+    await engine.dispose()
+
+
 def test_parse_timestamp_handles_nanoseconds_and_z() -> None:
     """Nanosecond precision and trailing Z are normalised to a tz-aware datetime."""
     parsed = parse_iso_timestamp("2026-06-15T15:30:10.976397254Z")

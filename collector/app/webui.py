@@ -57,7 +57,8 @@ _PAGE = """<!doctype html>
 </style></head><body>
 <h1>Actian Data Intelligence Companion</h1>
 <p>Data Catalog instance: <code>__INSTANCE_URL__</code></p>
-<p>Trigger a data collection now, bypassing the cron schedule.</p>
+<p>Trigger a data collection now, bypassing the cron schedule. Incremental:
+ audit events are refreshed since the last successful run.</p>
 <button id="run" onclick="trigger()">Run collection now</button>
 <button id="reload" onclick="forceReload()" style="background:#cf222e">Force reload history</button>
 <label style="margin-left:.4rem">days

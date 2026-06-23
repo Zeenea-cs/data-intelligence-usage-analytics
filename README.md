@@ -176,7 +176,7 @@ All variables are read from `.env`. The four marked **required** have no default
 | `ACTIAN_INSTANCE_URL` | Full base URL of the Actian instance, no trailing slash | **required** |
 | `ACTIAN_API_KEY` | API key sent as `X-API-SECRET` to Audit/Catalog/User-Mgmt (Bearer for SCIM) | **required** |
 | `COLLECT_CRON` | Cron expression for collection frequency | `0 0 * * *` (daily, midnight) |
-| `AUDIT_INITIAL_DAYS` | Days of history to request when retrieving audit events (Audit API `from` window) | `365` |
+| `AUDIT_INITIAL_DAYS` | Audit history depth for the **initial** backfill (first run, before any successful run exists); later runs are incremental since the last run | `365` |
 | `POSTGRES_HOST` | Companion PostgreSQL host | `db` |
 | `POSTGRES_PORT` | Companion PostgreSQL port | `5432` |
 | `POSTGRES_DB` | Companion database name | `actian_companion` |
@@ -288,9 +288,11 @@ recorded as a row in the `collection_runs` table (`status` =
 
 The collector serves a small web UI at <http://localhost:8000>:
 
-- A **“Run collection now”** button triggers a full cycle on demand, bypassing
-  the cron schedule. It **adds to / updates** existing data (upsert): new and
-  changed users, events and items are written; nothing is deleted.
+- A **“Run collection now”** button triggers a cycle on demand, bypassing the
+  cron schedule. It is **incremental**: audit events are fetched only since the
+  last successful run (the very first run falls back to the `AUDIT_INITIAL_DAYS`
+  look-back). It **adds to / updates** existing data (upsert): new and changed
+  users, events and items are written; nothing is deleted.
 - A **“Force reload history”** button (with a *days* input) **rebuilds the data
   from scratch**: it first deletes all collected `users`, `items` and
   `audit_events`, then runs a full collection with the audit window bounded to
@@ -311,7 +313,7 @@ The collector serves a small web UI at <http://localhost:8000>:
 | | Run collection now | Force reload history |
 |---|---|---|
 | Existing data | kept (upsert) | **deleted first**, then reloaded |
-| Audit window | configured `AUDIT_INITIAL_DAYS` | the *days* value you pass |
+| Audit window | since last successful run (first run: `AUDIT_INITIAL_DAYS`) | the *days* value you pass |
 | Users / items | refreshed (upsert) | wiped, then re-collected (full snapshot) |
 | `collection_runs` | appended | appended (history preserved) |
 | API | `POST /api/collect` | `POST /api/reload` |

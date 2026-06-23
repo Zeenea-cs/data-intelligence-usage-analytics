@@ -22,6 +22,7 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> None:
         "ACTIAN_INSTANCE_URL",
         "ACTIAN_API_KEY",
         "COLLECT_CRON",
+        "AUDIT_INITIAL_DAYS",
         "POSTGRES_HOST",
         "POSTGRES_PORT",
         "POSTGRES_DB",
@@ -45,11 +46,18 @@ def test_load_settings_reads_required_vars(monkeypatch: pytest.MonkeyPatch) -> N
     assert settings.actian_instance_url == "https://myorg.actian.com"
     # Optional vars fall back to documented defaults.
     assert settings.collect_cron == "0 0 * * *"
+    assert settings.audit_initial_days == 365  # default look-back window
     assert settings.postgres_host == "db"
     assert settings.postgres_port == 5432
     assert settings.postgres_db == "actian_companion"
     assert settings.postgres_user == "actian"
     assert settings.log_level == "INFO"
+
+
+def test_audit_initial_days_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AUDIT_INITIAL_DAYS overrides the default look-back window."""
+    _set_env(monkeypatch, AUDIT_INITIAL_DAYS="30")
+    assert load_settings().audit_initial_days == 30
 
 
 def test_database_url_uses_psycopg_dialect(monkeypatch: pytest.MonkeyPatch) -> None:

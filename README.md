@@ -162,6 +162,7 @@ All variables are read from `.env`. The four marked **required** have no default
 | `ACTIAN_INSTANCE_URL` | Full base URL of the Actian instance, no trailing slash | **required** |
 | `ACTIAN_API_KEY` | API key sent as `X-API-SECRET` to Audit/Catalog/User-Mgmt (Bearer for SCIM) | **required** |
 | `COLLECT_CRON` | Cron expression for collection frequency | `0 0 * * *` (daily, midnight) |
+| `AUDIT_INITIAL_DAYS` | Days of history to request when retrieving audit events (Audit API `from` window) | `365` |
 | `POSTGRES_HOST` | Companion PostgreSQL host | `db` |
 | `POSTGRES_PORT` | Companion PostgreSQL port | `5432` |
 | `POSTGRES_DB` | Companion database name | `actian_companion` |

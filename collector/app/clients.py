@@ -28,6 +28,6 @@ def build_clients(settings: Settings) -> ActianClients:
     base, key = settings.actian_instance_url, settings.actian_api_key
     return ActianClients(
         users=UsersClient(base, key),
-        audit=AuditClient(base, key),
+        audit=AuditClient(base, key, lookback_days=settings.audit_initial_days),
         catalog=CatalogClient(base, key),
     )

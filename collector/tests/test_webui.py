@@ -21,6 +21,7 @@ _SETTINGS = Settings(
     actian_instance_url="https://x",
     actian_api_key="k",
     collect_cron="0 0 * * *",
+    audit_initial_days=365,
     postgres_host="db",
     postgres_port=5432,
     postgres_db="d",

@@ -1,0 +1,686 @@
+<meta charset="utf-8">
+<title>Actian Data Intelligence Companion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#F0F2EE;
+    --surface:#FFFFFF;
+    --surface-2:#E6E9E2;
+    --ink:#1C2530;
+    --ink-soft:#586573;
+    --border:#D6DACF;
+    --accent:#256B5C;
+    --accent-contrast:#FFFFFF;
+    --accent-soft:#DCEAE4;
+    --accent-2:#3E5C76;
+    --accent-2-soft:#E4E9EF;
+    --warn:#A9701A;
+    --warn-soft:#F1E2C4;
+    --warn-border:#D9B36B;
+    --shadow:0 10px 28px rgba(28,37,48,0.12);
+    --code-bg:#1C2530;
+    --code-ink:#DCE3E8;
+    --code-accent:#7FD9BE;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#10161F;
+      --surface:#182330;
+      --surface-2:#1E2A38;
+      --ink:#DCE3E8;
+      --ink-soft:#93A2AE;
+      --border:#2A3846;
+      --accent:#4FB69C;
+      --accent-contrast:#0B1712;
+      --accent-soft:rgba(79,182,156,0.16);
+      --accent-2:#7C9CC2;
+      --accent-2-soft:rgba(124,156,194,0.16);
+      --warn:#E0A94A;
+      --warn-soft:rgba(224,169,74,0.16);
+      --warn-border:rgba(224,169,74,0.45);
+      --shadow:0 10px 28px rgba(0,0,0,0.5);
+      --code-bg:#0D141C;
+      --code-ink:#D7E1E8;
+      --code-accent:#7FD9BE;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#10161F;
+    --surface:#182330;
+    --surface-2:#1E2A38;
+    --ink:#DCE3E8;
+    --ink-soft:#93A2AE;
+    --border:#2A3846;
+    --accent:#4FB69C;
+    --accent-contrast:#0B1712;
+    --accent-soft:rgba(79,182,156,0.16);
+    --accent-2:#7C9CC2;
+    --accent-2-soft:rgba(124,156,194,0.16);
+    --warn:#E0A94A;
+    --warn-soft:rgba(224,169,74,0.16);
+    --warn-border:rgba(224,169,74,0.45);
+    --shadow:0 10px 28px rgba(0,0,0,0.5);
+    --code-bg:#0D141C;
+    --code-ink:#D7E1E8;
+    --code-accent:#7FD9BE;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"IBM Plex Sans", system-ui, sans-serif;
+    overflow:hidden;
+  }
+  h1,h2,h3{
+    font-family:"Big Shoulders Display","IBM Plex Sans",sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.01em;
+    text-wrap:balance;
+    margin:0;
+    color:var(--ink);
+  }
+  code, .mono{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+  }
+  p{margin:0;line-height:1.55;}
+
+  .deck{
+    position:relative;
+    width:100vw;
+    height:100dvh;
+    overflow:hidden;
+  }
+  .track{
+    display:flex;
+    height:100%;
+    transition:transform .55s cubic-bezier(.4,0,.2,1);
+    will-change:transform;
+  }
+  @media (prefers-reduced-motion: reduce){
+    .track{transition:none;}
+  }
+  .slide{
+    flex:0 0 100%;
+    height:100%;
+    overflow-y:auto;
+  }
+  .slide-inner{
+    box-sizing:border-box;
+    min-height:100%;
+    width:min(1180px, 92vw);
+    padding:6vh 0 13vh;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:.5em;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:.78rem;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+    background:var(--accent-soft);
+    border:1px solid var(--accent);
+    border-radius:999px;
+    padding:.3em .9em;
+    margin-bottom:1.4rem;
+  }
+  .eyebrow.slate{color:var(--accent-2);background:var(--accent-2-soft);border-color:var(--accent-2);}
+  .eyebrow.warn{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-border);}
+
+  h2.slide-title{font-size:clamp(2rem, 4.2vw, 3.1rem); font-weight:800; margin-bottom:1.1rem;}
+  .lede{font-size:1.15rem;color:var(--ink-soft);max-width:62ch;margin-bottom:2rem;}
+
+  .stack{display:flex;flex-direction:column;gap:1.1rem;}
+  .row{display:flex;gap:1.4rem;flex-wrap:wrap;}
+  .col{flex:1 1 0;min-width:260px;}
+
+  ul.plain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.85rem;}
+  ul.plain li{
+    position:relative;padding-left:1.5rem;
+    font-size:1.05rem;line-height:1.5;
+  }
+  ul.plain li::before{
+    content:"";
+    position:absolute;left:0;top:.55em;
+    width:8px;height:8px;border-radius:50%;
+    background:var(--accent);
+  }
+  ul.plain.slate li::before{background:var(--accent-2);}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:1.5rem 1.7rem;
+    box-shadow:var(--shadow);
+  }
+  .card h3{font-size:1.05rem;font-weight:700;text-transform:none;letter-spacing:0;margin-bottom:.5rem;}
+  .card h3.mono{font-family:"IBM Plex Mono",monospace;color:var(--accent-2);font-size:1.02rem;}
+  .card p.small{font-size:.94rem;color:var(--ink-soft);}
+  .badge{
+    display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.7rem;
+    letter-spacing:.06em;text-transform:uppercase;
+    padding:.15em .55em;border-radius:5px;
+    background:var(--accent-2-soft);color:var(--accent-2);border:1px solid var(--accent-2);
+    margin-left:.5em;
+  }
+
+  pre{
+    background:var(--code-bg);color:var(--code-ink);
+    border-radius:10px;padding:1.1rem 1.3rem;
+    font-family:"IBM Plex Mono",monospace;font-size:.92rem;line-height:1.65;
+    overflow-x:auto;margin:0;
+    border:1px solid rgba(127,217,190,0.18);
+  }
+  pre .c{color:var(--code-accent);}
+  pre .comment{color:#8A97A0;}
+
+  table{border-collapse:collapse;width:100%;font-size:.95rem;}
+  th,td{text-align:left;padding:.6rem .9rem;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{font-family:"IBM Plex Mono",monospace;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;}
+  td.mono{font-family:"IBM Plex Mono",monospace;color:var(--accent-2);font-size:.88rem;}
+  .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:var(--shadow);}
+  .table-wrap table{margin:0;}
+  .table-wrap th:first-child,.table-wrap td:first-child{padding-left:1.3rem;}
+
+  /* Title slide */
+  .title-slide{display:flex;flex-direction:column;gap:1.2rem;}
+  .title-slide h1{font-size:clamp(2.6rem, 6.4vw, 5rem);font-weight:800;line-height:.98;}
+  .title-slide .sub{font-size:1.25rem;color:var(--ink-soft);max-width:52ch;}
+  .stamp{
+    align-self:flex-start;
+    display:flex;align-items:center;gap:.6rem;
+    border:1px solid var(--warn-border);background:var(--warn-soft);color:var(--warn);
+    border-radius:8px;padding:.55rem 1rem;font-size:.85rem;font-weight:600;
+  }
+  .stamp .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:0 0 8px;}
+  .title-meta{display:flex;gap:2.2rem;flex-wrap:wrap;margin-top:.6rem;color:var(--ink-soft);font-family:"IBM Plex Mono",monospace;font-size:.85rem;}
+  .title-meta strong{color:var(--ink);display:block;font-family:"IBM Plex Sans",sans-serif;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:.2rem;}
+
+  /* Architecture diagram */
+  .diagram{display:flex;flex-direction:column;align-items:center;gap:0;}
+  .tier{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;width:100%;}
+  .node{
+    background:var(--surface);border:1.5px solid var(--border);border-radius:10px;
+    padding:.85rem 1.1rem;text-align:center;min-width:150px;
+    box-shadow:var(--shadow);
+  }
+  .node.accent{border-color:var(--accent);}
+  .node .name{font-weight:700;font-size:.98rem;}
+  .node .tag{display:block;font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink-soft);margin-top:.25rem;letter-spacing:.04em;}
+  .connector{color:var(--ink-soft);font-size:1.4rem;line-height:1;margin:.35rem 0;}
+  .wide-node{
+    background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:12px;
+    padding:1rem 1.4rem;box-shadow:var(--shadow);width:100%;max-width:640px;
+  }
+  .wide-node .name{font-weight:700;color:var(--accent);text-transform:uppercase;font-size:.82rem;letter-spacing:.08em;margin-bottom:.6rem;}
+  .subrow{display:flex;gap:.6rem;flex-wrap:wrap;}
+  .chip{
+    background:var(--surface);border:1px solid var(--border);border-radius:7px;
+    padding:.4rem .7rem;font-size:.82rem;font-family:"IBM Plex Mono",monospace;color:var(--ink);
+  }
+
+  /* Cycle steps */
+  .steps{display:flex;align-items:stretch;gap:.5rem;flex-wrap:wrap;justify-content:center;}
+  .step{
+    background:var(--surface);border:1.5px solid var(--border);border-radius:12px;
+    padding:1.1rem 1.2rem;min-width:170px;flex:1 1 170px;box-shadow:var(--shadow);
+  }
+  .step .num{font-family:"Big Shoulders Display";font-weight:800;font-size:1.6rem;color:var(--accent-2);line-height:1;}
+  .step .label{font-weight:700;margin-top:.35rem;font-size:.98rem;}
+  .step .detail{color:var(--ink-soft);font-size:.85rem;margin-top:.3rem;}
+  .step-arrow{align-self:center;color:var(--ink-soft);font-size:1.5rem;padding:0 .1rem;}
+
+  /* Data model grid */
+  .model-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;}
+  .model-grid .card ul{list-style:none;margin:.6rem 0 0;padding:0;font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--ink-soft);display:flex;flex-direction:column;gap:.3rem;}
+
+  /* Dashboards */
+  .dash-list{display:flex;flex-direction:column;gap:.5rem;}
+  .dash-item{display:flex;gap:1rem;align-items:baseline;border-bottom:1px solid var(--border);padding-bottom:.5rem;}
+  .dash-item:last-child{border-bottom:none;}
+  .dash-item .n{font-family:"Big Shoulders Display";font-weight:800;color:var(--accent);font-size:1.3rem;min-width:2ch;}
+  .dash-item .t{font-weight:700;}
+  .dash-item .d{color:var(--ink-soft);font-size:.92rem;}
+  .shots{display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;}
+  .shot{flex:1 1 260px;max-width:320px;border-radius:10px;overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);background:#fff;}
+  .shot img{display:block;width:100%;height:auto;}
+  .shot figcaption{margin:0;padding:.5rem .8rem;font-size:.76rem;color:var(--ink-soft);background:var(--surface-2);border-top:1px solid var(--border);}
+
+  /* step-of-setup header */
+  .setup-progress{display:flex;gap:.35rem;margin-bottom:1.2rem;}
+  .setup-progress span{width:26px;height:4px;border-radius:2px;background:var(--border);}
+  .setup-progress span.done{background:var(--accent-2);}
+
+  .warn-callout{
+    display:flex;gap:.8rem;align-items:flex-start;
+    background:var(--warn-soft);border:1px solid var(--warn-border);color:var(--warn);
+    border-radius:10px;padding:.9rem 1.1rem;font-size:.92rem;margin-top:1.2rem;
+  }
+  .warn-callout strong{color:var(--warn);}
+
+  /* Disclaimer slide */
+  .disclaimer-card{
+    border:1.5px solid var(--warn-border);background:var(--warn-soft);
+    border-radius:16px;padding:2rem 2.2rem;box-shadow:var(--shadow);
+  }
+  .disclaimer-card h2{color:var(--warn);font-size:1.5rem;margin-bottom:1rem;}
+  .disclaimer-card p{color:var(--ink);font-size:1.02rem;margin-bottom:.8rem;}
+  .disclaimer-card p:last-child{margin-bottom:0;}
+
+  /* Nav */
+  .nav-scrim{
+    position:fixed;left:0;right:0;bottom:0;height:110px;
+    background:linear-gradient(to top, var(--bg) 0%, transparent 100%);
+    pointer-events:none;z-index:4;
+  }
+  .navbar{
+    position:fixed;left:0;right:0;bottom:0;z-index:5;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 1.6rem .9rem;pointer-events:none;
+  }
+  .navbar > *{pointer-events:auto;}
+  .nav-btn{
+    width:44px;height:44px;border-radius:50%;
+    background:var(--surface);border:1px solid var(--border);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:var(--shadow);font-size:1.1rem;transition:transform .15s ease,background .15s ease;
+  }
+  .nav-btn:hover{background:var(--accent-soft);}
+  .nav-btn:active{transform:scale(.94);}
+  .nav-btn:disabled{opacity:.35;cursor:default;}
+  .nav-btn:disabled:hover{background:var(--surface);}
+  .nav-btn:focus-visible, .dot:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .nav-center{display:flex;align-items:center;gap:.9rem;}
+  .counter{font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:var(--ink-soft);letter-spacing:.05em;}
+  .dots{display:flex;gap:.4rem;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--border);border:none;padding:0;cursor:pointer;}
+  .dot.active{background:var(--accent);width:20px;border-radius:4px;}
+
+  .progress-top{position:fixed;top:0;left:0;height:3px;background:var(--accent);transition:width .55s cubic-bezier(.4,0,.2,1);z-index:5;}
+
+  @media (max-width:640px){
+    .slide-inner{padding:9vh 0 11vh;}
+    .navbar{padding:0 .8rem .7rem;}
+    .nav-center{gap:.5rem;}
+  }
+</style>
+
+<div class="progress-top" id="progressTop"></div>
+<div class="nav-scrim"></div>
+<div class="deck" id="deck">
+  <div class="track" id="track">
+
+    <!-- 1: TITLE -->
+    <section class="slide"><div class="slide-inner title-slide">
+      <div class="stamp"><span class="dot"></span>Proof of concept: not an official Actian product</div>
+      <h1>Actian Data<br>Intelligence<br>Companion</h1>
+      <p class="sub">A self-hosted analytics companion for the Actian Data Intelligence Platform. It turns catalog audit activity into ready-made Metabase dashboards.</p>
+      <div class="title-meta">
+        <div><strong>Stack</strong>Python · PostgreSQL 16 · Metabase · Docker Compose</div>
+        <div><strong>Runs</strong>Entirely on your own machine or server</div>
+        <div><strong>Source</strong>github.com/Zeenea-cs/data-intelligence-usage-analytics</div>
+      </div>
+    </div></section>
+
+    <!-- 2: WHY -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow">Overview</span>
+      <h2 class="slide-title">Catalog activity, without the manual export</h2>
+      <p class="lede">Governance and data teams want to see who's documenting what, and how that changes over time. Today that means logging into three different APIs and stitching CSVs together by hand.</p>
+      <ul class="plain">
+        <li>The Actian Data Intelligence Platform holds this data across four separate interfaces: the Audit API, the Catalog API, the User Management API, and SCIM, with no single place to query or trend it.</li>
+        <li>This companion collects all four on a schedule, stores the result in PostgreSQL, and exposes it through Metabase so anyone can self-serve a report instead of asking an engineer for a query.</li>
+        <li>Answers questions like: who are the most active curators, which items get modified most, how is documentation coverage trending, and how many licensed stewards vs. explorers do we have.</li>
+      </ul>
+    </div></section>
+
+    <!-- 3: WHAT IT IS -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow">Overview</span>
+      <h2 class="slide-title">Four services, one <code>docker compose up</code></h2>
+      <div class="row">
+        <div class="col card">
+          <h3 class="mono">db</h3>
+          <p class="small">PostgreSQL 16. The companion's own database, <code>actian_companion</code>, holding every collected row.</p>
+        </div>
+        <div class="col card">
+          <h3 class="mono">collector</h3>
+          <p class="small">Python 3.12. Pulls Audit / Catalog / User&nbsp;Management / SCIM data on a cron, upserts it into Postgres, and serves a small trigger web UI on port 8000.</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col card">
+          <h3 class="mono">metabase</h3>
+          <p class="small">Metabase (open source). Dashboards and self-service exploration on port 3000.</p>
+        </div>
+        <div class="col card">
+          <h3 class="mono">metabase-db</h3>
+          <p class="small">A second PostgreSQL instance for Metabase's own application data, kept separate from <code>actian_companion</code> on purpose.</p>
+        </div>
+      </div>
+    </div></section>
+
+    <!-- 4: ARCHITECTURE -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow slate">Architecture</span>
+      <h2 class="slide-title">How the pieces connect</h2>
+      <div class="diagram">
+        <div class="tier">
+          <div class="node"><span class="name">Audit API</span><span class="tag">REST</span></div>
+          <div class="node"><span class="name">Catalog API</span><span class="tag">GraphQL</span></div>
+          <div class="node"><span class="name">User Mgmt API</span><span class="tag">GraphQL</span></div>
+          <div class="node"><span class="name">SCIM API</span><span class="tag">REST · Bearer</span></div>
+        </div>
+        <div class="connector">↓</div>
+        <div class="wide-node">
+          <div class="name">collector (Python)</div>
+          <div class="subrow">
+            <div class="chip">API clients</div>
+            <div class="chip">collectors: users → audit → items</div>
+            <div class="chip">APScheduler</div>
+            <div class="chip">web UI :8000</div>
+          </div>
+        </div>
+        <div class="connector">↓</div>
+        <div class="tier">
+          <div class="node accent"><span class="name">PostgreSQL</span><span class="tag">actian_companion</span></div>
+        </div>
+        <div class="connector">↓</div>
+        <div class="tier">
+          <div class="node accent"><span class="name">Metabase</span><span class="tag">:3000 · dashboards</span></div>
+        </div>
+      </div>
+    </div></section>
+
+    <!-- 5: COLLECTION CYCLE -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow slate">Architecture</span>
+      <h2 class="slide-title">What happens on every run</h2>
+      <div class="steps">
+        <div class="step"><div class="num">1</div><div class="label">Trigger</div><div class="detail">cron schedule, container startup, or a click in the web UI</div></div>
+        <div class="step-arrow">→</div>
+        <div class="step"><div class="num">2</div><div class="label">Collect users</div><div class="detail">User Mgmt export + SCIM, upsert into <code>users</code></div></div>
+        <div class="step-arrow">→</div>
+        <div class="step"><div class="num">3</div><div class="label">Collect audit events</div><div class="detail">incremental since the last successful run, upsert into <code>audit_events</code></div></div>
+        <div class="step-arrow">→</div>
+        <div class="step"><div class="num">4</div><div class="label">Collect items</div><div class="detail">enrich from Catalog API for every item seen in the audit trail</div></div>
+        <div class="step-arrow">→</div>
+        <div class="step"><div class="num">5</div><div class="label">Record the run</div><div class="detail">one row in <code>collection_runs</code>: success, partial, or failed</div></div>
+      </div>
+      <p class="lede" style="margin-top:2rem;">If one collector fails, the run is marked <strong>partial</strong> and the rest continue: a bad audit fetch never stops user collection, and never crashes the scheduler.</p>
+    </div></section>
+
+    <!-- 6: DATA MODEL -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow slate">Data model</span>
+      <h2 class="slide-title">Five tables, one source of truth</h2>
+      <div class="model-grid">
+        <div class="card">
+          <h3 class="mono">users</h3>
+          <p class="small">One live row per person, upserted.</p>
+          <ul><li>is_steward</li><li>roles (jsonb)</li><li>email</li></ul>
+        </div>
+        <div class="card">
+          <h3 class="mono">audit_events</h3>
+          <p class="small">Item-level activity, deduped by event id.</p>
+          <ul><li>event_id (unique)</li><li>action, item_id</li><li>occurred_at</li></ul>
+        </div>
+        <div class="card">
+          <h3 class="mono">items</h3>
+          <p class="small">Catalog objects referenced by audit events.</p>
+          <ul><li>item_type</li><li>owner_id</li><li>last_updated_at</li></ul>
+        </div>
+        <div class="card">
+          <h3 class="mono">collection_runs</h3>
+          <p class="small">One row per cycle: the operational log.</p>
+          <ul><li>status</li><li>users / events / items collected</li></ul>
+        </div>
+        <div class="card">
+          <h3 class="mono">user_snapshots</h3>
+          <p class="small">Append-only. One row per user, per run, never updated, so licence use can be trended over time.</p>
+          <ul><li>snapshot_at</li><li>license_type</li></ul>
+        </div>
+      </div>
+    </div></section>
+
+    <!-- 7: DASHBOARDS -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow">Reporting</span>
+      <h2 class="slide-title">Six dashboards, ready on first boot</h2>
+      <p class="lede" style="margin-bottom:1.1rem;">Metabase is configured automatically: a one-shot setup service connects the database and builds these the moment the stack is healthy.</p>
+      <div class="dash-list">
+        <div class="dash-item"><div class="n">1</div><div><div class="t">Actian Data Intelligence Activity</div><div class="d">top contributors, top modified items, weekly documentation pace</div></div></div>
+        <div class="dash-item"><div class="n">2</div><div><div class="t">Users &amp; Stewardship</div><div class="d">stewards vs. non-stewards, users by permission set</div></div></div>
+        <div class="dash-item"><div class="n">3</div><div><div class="t">Most Active Users</div><div class="d">rolling 7 / 30 / 365-day activity leaderboards</div></div></div>
+        <div class="dash-item"><div class="n">4</div><div><div class="t">Most Updated Items</div><div class="d">top-10 items by modification count, with detail table</div></div></div>
+        <div class="dash-item"><div class="n">5</div><div><div class="t">Documentation Coverage per Curator</div><div class="d">edited ÷ managed items, per curator</div></div></div>
+        <div class="dash-item"><div class="n">6</div><div><div class="t">Licence Consumption</div><div class="d">stewards, explorers, total, trended over time</div></div></div>
+      </div>
+      <div class="shots">
+        <figure class="shot">
+          <img alt="Activity overview dashboard mock-up" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgMzgwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLFNlZ29lIFVJLEFyaWFsLHNhbnMtc2VyaWYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI2NDAiIGhlaWdodD0iMzgwIiByeD0iOCIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZTFlNGU4Ii8+CiAgPHRleHQgeD0iMTYiIHk9IjI4IiBmb250LXNpemU9IjE2IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMjQyOTJmIj5BY3RpYW4gRGF0YSBJbnRlbGxpZ2VuY2UgQWN0aXZpdHk8L3RleHQ+CiAgPHRleHQgeD0iNTU2IiB5PSIyOCIgZm9udC1zaXplPSIxMSIgZmlsbD0iIzhiOTQ5ZSI+aWxsdXN0cmF0aXZlPC90ZXh0PgoKICA8IS0tIEtQSSBjYXJkcyAtLT4KICA8Zz4KICAgIDxyZWN0IHg9IjE2IiB5PSI0NCIgd2lkdGg9IjE5NCIgaGVpZ2h0PSI3MCIgcng9IjYiIGZpbGw9IiNmNmY4ZmEiIHN0cm9rZT0iI2UxZTRlOCIvPgogICAgPHRleHQgeD0iMjgiIHk9IjcwIiBmb250LXNpemU9IjExIiBmaWxsPSIjNTc2MDZhIj5Vc2VyczwvdGV4dD4KICAgIDx0ZXh0IHg9IjI4IiB5PSIxMDAiIGZvbnQtc2l6ZT0iMjYiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxZjZmZWIiPjQyPC90ZXh0PgoKICAgIDxyZWN0IHg9IjIyMyIgeT0iNDQiIHdpZHRoPSIxOTQiIGhlaWdodD0iNzAiIHJ4PSI2IiBmaWxsPSIjZjZmOGZhIiBzdHJva2U9IiNlMWU0ZTgiLz4KICAgIDx0ZXh0IHg9IjIzNSIgeT0iNzAiIGZvbnQtc2l6ZT0iMTEiIGZpbGw9IiM1NzYwNmEiPkF1ZGl0IGV2ZW50czwvdGV4dD4KICAgIDx0ZXh0IHg9IjIzNSIgeT0iMTAwIiBmb250LXNpemU9IjI2IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMWY2ZmViIj42LjFrPC90ZXh0PgoKICAgIDxyZWN0IHg9IjQzMCIgeT0iNDQiIHdpZHRoPSIxOTQiIGhlaWdodD0iNzAiIHJ4PSI2IiBmaWxsPSIjZjZmOGZhIiBzdHJva2U9IiNlMWU0ZTgiLz4KICAgIDx0ZXh0IHg9IjQ0MiIgeT0iNzAiIGZvbnQtc2l6ZT0iMTEiIGZpbGw9IiM1NzYwNmEiPkN1cmF0ZWQgaXRlbXM8L3RleHQ+CiAgICA8dGV4dCB4PSI0NDIiIHk9IjEwMCIgZm9udC1zaXplPSIyNiIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iIzFmNmZlYiI+OTgwPC90ZXh0PgogIDwvZz4KCiAgPCEtLSBXZWVrbHkgcGFjZSBsaW5lIGNoYXJ0IC0tPgogIDxyZWN0IHg9IjE2IiB5PSIxMjgiIHdpZHRoPSIzMDAiIGhlaWdodD0iMjMyIiByeD0iNiIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZTFlNGU4Ii8+CiAgPHRleHQgeD0iMjgiIHk9IjE1MiIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9IjYwMCIgZmlsbD0iIzI0MjkyZiI+V2Vla2x5IERvY3VtZW50YXRpb24gUGFjZTwvdGV4dD4KICA8bGluZSB4MT0iNDAiIHkxPSIzMzAiIHgyPSIzMDAiIHkyPSIzMzAiIHN0cm9rZT0iI2UxZTRlOCIvPgogIDxsaW5lIHgxPSI0MCIgeTE9IjE3MCIgeDI9IjQwIiB5Mj0iMzMwIiBzdHJva2U9IiNlMWU0ZTgiLz4KICA8cG9seWxpbmUgcG9pbnRzPSI0OCwzMDAgOTYsMjg4IDE0NCwyNTAgMTkyLDI2MCAyNDAsMjA1IDI4OCwxNzgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFmNmZlYiIgc3Ryb2tlLXdpZHRoPSIyLjUiLz4KICA8ZyBmaWxsPSIjMWY2ZmViIj4KICAgIDxjaXJjbGUgY3g9IjQ4IiBjeT0iMzAwIiByPSIzIi8+PGNpcmNsZSBjeD0iOTYiIGN5PSIyODgiIHI9IjMiLz48Y2lyY2xlIGN4PSIxNDQiIGN5PSIyNTAiIHI9IjMiLz4KICAgIDxjaXJjbGUgY3g9IjE5MiIgY3k9IjI2MCIgcj0iMyIvPjxjaXJjbGUgY3g9IjI0MCIgY3k9IjIwNSIgcj0iMyIvPjxjaXJjbGUgY3g9IjI4OCIgY3k9IjE3OCIgcj0iMyIvPgogIDwvZz4KICA8dGV4dCB4PSI0MCIgeT0iMzUwIiBmb250LXNpemU9IjEwIiBmaWxsPSIjOGI5NDllIj5XMTwvdGV4dD4KICA8dGV4dCB4PSIyODAiIHk9IjM1MCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzhiOTQ5ZSI+VzY8L3RleHQ+CgogIDwhLS0gVG9wIG1vZGlmaWVkIGl0ZW1zIC0tPgogIDxyZWN0IHg9IjMyOCIgeT0iMTI4IiB3aWR0aD0iMjk2IiBoZWlnaHQ9IjIzMiIgcng9IjYiIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iI2UxZTRlOCIvPgogIDx0ZXh0IHg9IjM0MCIgeT0iMTUyIiBmb250LXNpemU9IjEzIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjMjQyOTJmIj5Ub3AgTW9kaWZpZWQgSXRlbXM8L3RleHQ+CiAgPGcgZm9udC1zaXplPSIxMSIgZmlsbD0iIzU3NjA2YSI+CiAgICA8dGV4dCB4PSIzNDAiIHk9IjE4NCI+Y3VzdG9tZXJfbWFzdGVyPC90ZXh0PgogICAgPHJlY3QgeD0iMzQwIiB5PSIxOTAiIHdpZHRoPSIyNzAiIGhlaWdodD0iMTIiIHJ4PSIzIiBmaWxsPSIjZWFlZWYyIi8+CiAgICA8cmVjdCB4PSIzNDAiIHk9IjE5MCIgd2lkdGg9IjI3MCIgaGVpZ2h0PSIxMiIgcng9IjMiIGZpbGw9IiM4MjUwZGYiLz4KICAgIDx0ZXh0IHg9IjM0MCIgeT0iMjIwIj5vcmRlcnNfZmFjdDwvdGV4dD4KICAgIDxyZWN0IHg9IjM0MCIgeT0iMjI2IiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iI2VhZWVmMiIvPgogICAgPHJlY3QgeD0iMzQwIiB5PSIyMjYiIHdpZHRoPSIyMDgiIGhlaWdodD0iMTIiIHJ4PSIzIiBmaWxsPSIjODI1MGRmIi8+CiAgICA8dGV4dCB4PSIzNDAiIHk9IjI1NiI+cHJvZHVjdF9kaW08L3RleHQ+CiAgICA8cmVjdCB4PSIzNDAiIHk9IjI2MiIgd2lkdGg9IjI3MCIgaGVpZ2h0PSIxMiIgcng9IjMiIGZpbGw9IiNlYWVlZjIiLz4KICAgIDxyZWN0IHg9IjM0MCIgeT0iMjYyIiB3aWR0aD0iMTU2IiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iIzgyNTBkZiIvPgogICAgPHRleHQgeD0iMzQwIiB5PSIyOTIiPnJldmVudWVfcmVwb3J0PC90ZXh0PgogICAgPHJlY3QgeD0iMzQwIiB5PSIyOTgiIHdpZHRoPSIyNzAiIGhlaWdodD0iMTIiIHJ4PSIzIiBmaWxsPSIjZWFlZWYyIi8+CiAgICA8cmVjdCB4PSIzNDAiIHk9IjI5OCIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMiIgcng9IjMiIGZpbGw9IiM4MjUwZGYiLz4KICAgIDx0ZXh0IHg9IjM0MCIgeT0iMzI4Ij5kYXRhX2dsb3NzYXJ5PC90ZXh0PgogICAgPHJlY3QgeD0iMzQwIiB5PSIzMzQiIHdpZHRoPSIyNzAiIGhlaWdodD0iMTIiIHJ4PSIzIiBmaWxsPSIjZWFlZWYyIi8+CiAgICA8cmVjdCB4PSIzNDAiIHk9IjMzNCIgd2lkdGg9Ijc0IiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iIzgyNTBkZiIvPgogIDwvZz4KPC9zdmc+Cg==">
+          <figcaption>Illustrative mock-up, synthetic data, not real catalog content.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img alt="Documentation coverage per curator dashboard mock-up" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgMzIwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLFNlZ29lIFVJLEFyaWFsLHNhbnMtc2VyaWYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI2NDAiIGhlaWdodD0iMzIwIiByeD0iOCIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjZTFlNGU4Ii8+CiAgPHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MCIgcng9IjgiIGZpbGw9IiNmNmY4ZmEiLz4KICA8cmVjdCB4PSIwIiB5PSIzMiIgd2lkdGg9IjY0MCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjZmOGZhIi8+CiAgPHRleHQgeD0iMTYiIHk9IjI2IiBmb250LXNpemU9IjE1IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMjQyOTJmIj5Eb2N1bWVudGF0aW9uIENvdmVyYWdlIHBlciBDdXJhdG9yPC90ZXh0PgogIDx0ZXh0IHg9IjU1NiIgeT0iMjYiIGZvbnQtc2l6ZT0iMTEiIGZpbGw9IiM4Yjk0OWUiPmlsbHVzdHJhdGl2ZTwvdGV4dD4KCiAgPGcgZm9udC1zaXplPSIxMiIgZmlsbD0iIzU3NjA2YSI+CiAgICA8dGV4dCB4PSIxNiIgeT0iNzQiPkF2ZXJ5IFF1aW5uPC90ZXh0PgogICAgPHJlY3QgeD0iMTUwIiB5PSI2NCIgd2lkdGg9IjM4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiNlYWVlZjIiLz4KICAgIDxyZWN0IHg9IjE1MCIgeT0iNjQiIHdpZHRoPSIzODAiIGhlaWdodD0iMTQiIHJ4PSIzIiBmaWxsPSIjMmRhNDRlIi8+CiAgICA8dGV4dCB4PSI1NDAiIHk9Ijc0IiBmaWxsPSIjMjQyOTJmIiBmb250LXdlaWdodD0iNjAwIj4xMDAlPC90ZXh0PgoKICAgIDx0ZXh0IHg9IjE2IiB5PSIxMTIiPkpvcmRhbiBMZWU8L3RleHQ+CiAgICA8cmVjdCB4PSIxNTAiIHk9IjEwMiIgd2lkdGg9IjM4MCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiNlYWVlZjIiLz4KICAgIDxyZWN0IHg9IjE1MCIgeT0iMTAyIiB3aWR0aD0iMzI3IiBoZWlnaHQ9IjE0IiByeD0iMyIgZmlsbD0iIzJkYTQ0ZSIvPgogICAgPHRleHQgeD0iNTQwIiB5PSIxMTIiIGZpbGw9IiMyNDI5MmYiIGZvbnQtd2VpZ2h0PSI2MDAiPjg2JTwvdGV4dD4KCiAgICA8dGV4dCB4PSIxNiIgeT0iMTUwIj5TYW0gUml2ZXJhPC90ZXh0PgogICAgPHJlY3QgeD0iMTUwIiB5PSIxNDAiIHdpZHRoPSIzODAiIGhlaWdodD0iMTQiIHJ4PSIzIiBmaWxsPSIjZWFlZWYyIi8+CiAgICA8cmVjdCB4PSIxNTAiIHk9IjE0MCIgd2lkdGg9IjI3NCIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiNiZjg3MDAiLz4KICAgIDx0ZXh0IHg9IjU0MCIgeT0iMTUwIiBmaWxsPSIjMjQyOTJmIiBmb250LXdlaWdodD0iNjAwIj43MiU8L3RleHQ+CgogICAgPHRleHQgeD0iMTYiIHk9IjE4OCI+VGF5bG9yIEtpbTwvdGV4dD4KICAgIDxyZWN0IHg9IjE1MCIgeT0iMTc4IiB3aWR0aD0iMzgwIiBoZWlnaHQ9IjE0IiByeD0iMyIgZmlsbD0iI2VhZWVmMiIvPgogICAgPHJlY3QgeD0iMTUwIiB5PSIxNzgiIHdpZHRoPSIxOTAiIGhlaWdodD0iMTQiIHJ4PSIzIiBmaWxsPSIjYmY4NzAwIi8+CiAgICA8dGV4dCB4PSI1NDAiIHk9IjE4OCIgZmlsbD0iIzI0MjkyZiIgZm9udC13ZWlnaHQ9IjYwMCI+NTAlPC90ZXh0PgoKICAgIDx0ZXh0IHg9IjE2IiB5PSIyMjYiPk1vcmdhbiBEaWF6PC90ZXh0PgogICAgPHJlY3QgeD0iMTUwIiB5PSIyMTYiIHdpZHRoPSIzODAiIGhlaWdodD0iMTQiIHJ4PSIzIiBmaWxsPSIjZWFlZWYyIi8+CiAgICA8cmVjdCB4PSIxNTAiIHk9IjIxNiIgd2lkdGg9IjEyNSIgaGVpZ2h0PSIxNCIgcng9IjMiIGZpbGw9IiNjZjIyMmUiLz4KICAgIDx0ZXh0IHg9IjU0MCIgeT0iMjI2IiBmaWxsPSIjMjQyOTJmIiBmb250LXdlaWdodD0iNjAwIj4zMyU8L3RleHQ+CgogICAgPHRleHQgeD0iMTYiIHk9IjI2NCI+UmlsZXkgRm94PC90ZXh0PgogICAgPHJlY3QgeD0iMTUwIiB5PSIyNTQiIHdpZHRoPSIzODAiIGhlaWdodD0iMTQiIHJ4PSIzIiBmaWxsPSIjZWFlZWYyIi8+CiAgICA8cmVjdCB4PSIxNTAiIHk9IjI1NCIgd2lkdGg9IjYiIGhlaWdodD0iMTQiIHJ4PSIzIiBmaWxsPSIjY2YyMjJlIi8+CiAgICA8dGV4dCB4PSI1NDAiIHk9IjI2NCIgZmlsbD0iIzI0MjkyZiIgZm9udC13ZWlnaHQ9IjYwMCI+MCU8L3RleHQ+CiAgPC9nPgogIDx0ZXh0IHg9IjE2IiB5PSIzMDAiIGZvbnQtc2l6ZT0iMTEiIGZpbGw9IiM4Yjk0OWUiPkVkaXRlZCBtYW5hZ2VkIGl0ZW1zIMO3IG1hbmFnZWQgaXRlbXMgKGFuIGl0ZW0ncyBjdXJhdG9yKTwvdGV4dD4KPC9zdmc+Cg==">
+          <figcaption>Illustrative mock-up, synthetic data, not real catalog content.</figcaption>
+        </figure>
+      </div>
+    </div></section>
+
+    <!-- 8: PREREQUISITES -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow warn">Get it running: Prerequisites</span>
+      <h2 class="slide-title">Before you start</h2>
+      <ul class="plain">
+        <li>Docker Engine 24 or later.</li>
+        <li>Docker Compose v2 (the <code>docker compose ...</code> form, not the old <code>docker-compose</code> binary).</li>
+        <li>A valid Actian / Zeenea instance URL and API key, with read access to the Audit, Catalog, User Management and SCIM APIs.</li>
+        <li>Python on the host is <strong>not required</strong>: everything runs in containers. It's only needed if you want to run the Metabase setup script by hand instead of letting the stack run it for you.</li>
+      </ul>
+    </div></section>
+
+    <!-- 9: STEP 1 -->
+    <section class="slide"><div class="slide-inner">
+      <div class="setup-progress"><span class="done"></span><span></span><span></span><span></span><span></span></div>
+      <span class="eyebrow warn">Setup: Step 1 of 5</span>
+      <h2 class="slide-title">Clone the repo, then configure</h2>
+      <pre>git clone https://github.com/Zeenea-cs/data-intelligence-usage-analytics.git
+<span class="comment">cd</span> data-intelligence-usage-analytics/actian-companion
+cp .env.example .env</pre>
+      <p class="lede" style="margin-top:1.4rem;">Edit <code>.env</code> and set the four values with no working default:</p>
+      <div class="row">
+        <div class="col card"><h3 class="mono">ACTIAN_INSTANCE_URL</h3><p class="small">Full base URL, no trailing slash.</p></div>
+        <div class="col card"><h3 class="mono">ACTIAN_API_KEY</h3><p class="small">Sent as <code>X-API-SECRET</code>. Treat as a secret.</p></div>
+      </div>
+      <div class="row">
+        <div class="col card"><h3 class="mono">POSTGRES_PASSWORD</h3><p class="small">Companion database password.</p></div>
+        <div class="col card"><h3 class="mono">METABASE_DB_PASSWORD</h3><p class="small">Metabase's own application database password.</p></div>
+      </div>
+      <div class="warn-callout"><span>⚠</span><div>Also set a <strong>strong</strong> <code>METABASE_ADMIN_PASSWORD</code>: Metabase rejects common or short passwords, which would fail the automatic dashboard setup.</div></div>
+    </div></section>
+
+    <!-- 10: STEP 2 -->
+    <section class="slide"><div class="slide-inner">
+      <div class="setup-progress"><span class="done"></span><span class="done"></span><span></span><span></span><span></span></div>
+      <span class="eyebrow warn">Setup: Step 2 of 5</span>
+      <h2 class="slide-title">Prepare logs, then start the stack</h2>
+      <pre><span class="comment"># every service writes its logs here - open perms let the</span>
+<span class="comment"># Postgres / Metabase container users write to it</span>
+mkdir -p logs && chmod 777 logs
+
+docker compose up -d</pre>
+      <p class="lede" style="margin-top:1.4rem;">That's it. Four containers start: <code>db</code>, <code>collector</code>, <code>metabase</code>, <code>metabase-db</code>, plus a one-shot <code>metabase-setup</code> job.</p>
+    </div></section>
+
+    <!-- 11: STEP 3 -->
+    <section class="slide"><div class="slide-inner">
+      <div class="setup-progress"><span class="done"></span><span class="done"></span><span class="done"></span><span></span><span></span></div>
+      <span class="eyebrow warn">Setup: Step 3 of 5</span>
+      <h2 class="slide-title">Watch it come up</h2>
+      <pre>docker compose ps
+docker compose logs -f collector   <span class="comment"># Ctrl-C to stop following</span></pre>
+      <ul class="plain" style="margin-top:1.6rem;">
+        <li>Postgres and the collector are ready in seconds; Metabase takes 1–2 minutes on its first boot.</li>
+        <li>On startup the collector runs its database migrations automatically, then performs one immediate collection so the database isn't empty, and from then on runs on the configured schedule.</li>
+        <li>The <code>metabase-setup</code> job waits for Metabase to be healthy, connects the database, and builds the dashboards: watch it with <code>docker compose logs metabase-setup</code>. It's idempotent, so re-running it is always safe.</li>
+      </ul>
+    </div></section>
+
+    <!-- 12: STEP 4 -->
+    <section class="slide"><div class="slide-inner">
+      <div class="setup-progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span></span></div>
+      <span class="eyebrow warn">Setup: Step 4 of 5</span>
+      <h2 class="slide-title">Open Metabase</h2>
+      <p class="lede">Once healthy, the dashboards are waiting at:</p>
+      <div class="card" style="max-width:420px;"><h3 class="mono" style="font-size:1.2rem;">http://localhost:3000</h3></div>
+      <p class="lede" style="margin-top:1.6rem;">Default admin login, unless overridden in <code>.env</code>:</p>
+      <div class="row">
+        <div class="col card"><h3 class="mono">email</h3><p class="small">admin@actian-companion.local</p></div>
+        <div class="col card"><h3 class="mono">password</h3><p class="small">Actian-Companion-2026!</p></div>
+      </div>
+      <div class="warn-callout"><span>⚠</span><div>Change <code>METABASE_ADMIN_PASSWORD</code> in <code>.env</code> before running this anywhere other than your own machine.</div></div>
+    </div></section>
+
+    <!-- 13: STEP 5 -->
+    <section class="slide"><div class="slide-inner">
+      <div class="setup-progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+      <span class="eyebrow warn">Setup: Step 5 of 5</span>
+      <h2 class="slide-title">Trigger a manual run</h2>
+      <p class="lede">No need to wait for the cron: the collector serves a small web UI at <code>http://localhost:8000</code>.</p>
+      <div class="row">
+        <div class="col card">
+          <h3>Run collection now</h3>
+          <p class="small">Incremental: audit events since the last successful run. Upserts new and changed data; nothing is deleted.</p>
+        </div>
+        <div class="col card">
+          <h3>Force reload history<span class="badge">destructive</span></h3>
+          <p class="small">Deletes all collected users, items and audit events, then rebuilds from scratch over the window you choose. Asks for confirmation in the UI.</p>
+        </div>
+      </div>
+      <pre style="margin-top:1.3rem;">curl -X POST http://localhost:8000/api/collect   <span class="comment"># 202 started, 409 if already running</span></pre>
+    </div></section>
+
+    <!-- 14: CONFIG REFERENCE -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow slate">Reference</span>
+      <h2 class="slide-title">Configuration, at a glance</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Variable</th><th>Description</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ACTIAN_INSTANCE_URL</td><td>Base URL of your Actian instance</td><td class="mono">required</td></tr>
+            <tr><td class="mono">ACTIAN_API_KEY</td><td>API key for all four services</td><td class="mono">required</td></tr>
+            <tr><td class="mono">COLLECT_CRON</td><td>Collection schedule</td><td class="mono">0 0 * * *</td></tr>
+            <tr><td class="mono">AUDIT_INITIAL_DAYS</td><td>First-run audit look-back window</td><td class="mono">365</td></tr>
+            <tr><td class="mono">POSTGRES_PASSWORD</td><td>Companion database password</td><td class="mono">required</td></tr>
+            <tr><td class="mono">METABASE_DB_PASSWORD</td><td>Metabase's own database password</td><td class="mono">required</td></tr>
+            <tr><td class="mono">METABASE_ADMIN_PASSWORD</td><td>Metabase admin account password</td><td class="mono">Actian-Companion-2026!</td></tr>
+            <tr><td class="mono">LOG_LEVEL</td><td>Collector log verbosity</td><td class="mono">INFO</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="lede" style="margin-top:1.2rem;font-size:.95rem;">Full reference, including logging and web-UI options, is in the repo's <code>README.md</code>.</p>
+    </div></section>
+
+    <!-- 15: LIMITATIONS -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow slate">Scope</span>
+      <h2 class="slide-title">Known limitations</h2>
+      <ul class="plain slate">
+        <li>Only <code>eventType = Item</code> audit events are collected: User, Group, ApiKey and PermissionSet audit events are not stored.</li>
+        <li>Item enrichment depends on the Catalog API and only covers items actually seen in the audit trail; items deleted from the catalog are skipped and re-checked on later runs.</li>
+        <li>Steward detection is based on the User Management export's <code>License type == "Steward"</code>, not a SCIM group name.</li>
+        <li>This is a single-tenant tool built for one Actian instance at a time, not designed for high-volume or high-availability deployment.</li>
+      </ul>
+    </div></section>
+
+    <!-- 16: DISCLAIMER -->
+    <section class="slide"><div class="slide-inner">
+      <span class="eyebrow warn">Disclaimer</span>
+      <div class="disclaimer-card">
+        <h2>Proof of concept: not an official Actian product</h2>
+        <p>This software is provided <strong>"as is", without warranty of any kind</strong>, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and non-infringement. Use it at your own risk.</p>
+        <p>It is <strong>not an official Actian product</strong> and is <strong>not affiliated with, endorsed by, or supported by Actian</strong>. Its sole purpose is to illustrate what can be built on top of the Actian Data Intelligence Platform APIs: a demonstration, not a production-ready or maintained tool.</p>
+        <p><strong>No support is provided</strong>, and the authors accept no liability for any use of this code or its outputs.</p>
+      </div>
+      <p class="lede" style="margin-top:2rem;">Full source, tests and the complete README: <span class="mono">github.com/Zeenea-cs/data-intelligence-usage-analytics</span></p>
+    </div></section>
+
+  </div>
+</div>
+
+<div class="navbar">
+  <button class="nav-btn" id="prevBtn" aria-label="Previous slide">‹</button>
+  <div class="nav-center">
+    <span class="counter" id="counter">1 / 16</span>
+    <div class="dots" id="dots"></div>
+  </div>
+  <button class="nav-btn" id="nextBtn" aria-label="Next slide">›</button>
+</div>
+
+<script>
+(function(){
+  var track = document.getElementById('track');
+  var slides = Array.prototype.slice.call(track.children);
+  var n = slides.length;
+  var idx = 0;
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var counter = document.getElementById('counter');
+  var dotsWrap = document.getElementById('dots');
+  var progressTop = document.getElementById('progressTop');
+
+  for (var i=0;i<n;i++){
+    var d = document.createElement('button');
+    d.className = 'dot' + (i===0?' active':'');
+    d.setAttribute('aria-label','Go to slide ' + (i+1));
+    (function(index){ d.addEventListener('click', function(){ goTo(index); }); })(i);
+    dotsWrap.appendChild(d);
+  }
+  var dots = Array.prototype.slice.call(dotsWrap.children);
+
+  function render(){
+    track.style.transform = 'translateX(-' + (idx*100) + '%)';
+    counter.textContent = (idx+1) + ' / ' + n;
+    prevBtn.disabled = idx===0;
+    nextBtn.disabled = idx===n-1;
+    dots.forEach(function(dot,i){ dot.classList.toggle('active', i===idx); });
+    progressTop.style.width = (((idx+1)/n)*100) + '%';
+  }
+  function goTo(i){
+    idx = Math.max(0, Math.min(n-1, i));
+    slides[idx].scrollTop = 0;
+    render();
+  }
+  prevBtn.addEventListener('click', function(){ goTo(idx-1); });
+  nextBtn.addEventListener('click', function(){ goTo(idx+1); });
+
+  window.addEventListener('keydown', function(e){
+    if (e.key==='ArrowRight' || e.key===' ' || e.key==='PageDown'){ e.preventDefault(); goTo(idx+1); }
+    else if (e.key==='ArrowLeft' || e.key==='PageUp'){ e.preventDefault(); goTo(idx-1); }
+    else if (e.key==='Home'){ goTo(0); }
+    else if (e.key==='End'){ goTo(n-1); }
+  });
+
+  var touchX = null;
+  track.addEventListener('touchstart', function(e){ touchX = e.changedTouches[0].clientX; }, {passive:true});
+  track.addEventListener('touchend', function(e){
+    if (touchX===null) return;
+    var dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50){ dx < 0 ? goTo(idx+1) : goTo(idx-1); }
+    touchX = null;
+  }, {passive:true});
+
+  render();
+})();
+</script>

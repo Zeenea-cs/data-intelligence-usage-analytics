@@ -88,6 +88,7 @@ erDiagram
     bigint id PK
     string event_id UK
     string user_id FK
+    string actor_id "generated, incl. former users"
     string item_id
     timestamptz occurred_at
   }
@@ -225,8 +226,13 @@ runs, **removes Metabase's default example assets** (Sample Database, the
 *E-commerce Insights* dashboard and the *Examples* collection), connects the
 `actian_companion` database, and (re)builds the application cards and dashboards.
 
-> All audit-based statistics **exclude events not linked to a user** (rows with
-> no `user_id`); only known users are counted.
+> All audit-based statistics count events made by **a user** — including users
+> who have since left the platform, shown as *Former user*. Events by API keys
+> and other non-user actors are excluded. They key on `audit_events.actor_id`,
+> generated from the event's origin, rather than `user_id`, which is a foreign key
+> and therefore empty for anyone absent from the latest user export: counting on
+> it silently dropped every edit by a departed user. *Least active* rankings
+> consider current users only, since a former user's licence is already gone.
 
 Default admin login (override via `.env` — see §3):
 

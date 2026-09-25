@@ -290,16 +290,19 @@ async def _run_collect_audit() -> None:
         session.add(User(id="22222222", username="alex.curator@example.com", is_steward=True))
         await session.commit()
 
+    api_key_event = _item_event("evt-3", "key-1")
+    api_key_event["origin"]["originType"] = "ApiKey"
     events = [
         _item_event("evt-1", "22222222", action="CreateItem"),
         _item_event("evt-2", "unknown-user"),  # origin not in users table
+        api_key_event,
     ]
     client = FakeAuditClient(events)
 
     async with factory() as session:
         count = await collect_audit_events(session, client)
         await session.commit()
-    assert count == 2
+    assert count == 3
 
     # Re-collect the same events -> upsert, no new rows.
     async with factory() as session:
@@ -319,7 +322,7 @@ async def _run_collect_audit() -> None:
             )
         ).scalar_one()
 
-    assert total == 2  # idempotent: still two rows after the second run
+    assert total == 3  # idempotent: still three rows after the second run
     # Mapping checks.
     assert e1.action == "CreateItem"
     assert e1.item_type == "Item"
@@ -331,6 +334,16 @@ async def _run_collect_audit() -> None:
     assert e2.user_id is None
     assert e2.username is None
     assert e2.raw_payload["origin"]["id"] == "unknown-user"
+    # ...but the edit is still attributed. A user who left before the first
+    # collection used to vanish from every activity statistic, because the cards
+    # filtered on user_id; they now count on actor_id.
+    assert e1.actor_id == "22222222"
+    assert e2.actor_id == "unknown-user"
+    async with factory() as session:
+        e3 = (
+            await session.execute(select(AuditEvent).where(AuditEvent.event_id == "evt-3"))
+        ).scalar_one()
+    assert e3.actor_id is None  # an API key is not a contributor
 
     # A subsequent run with a CHANGED payload for an existing event_id updates the
     # row in place -- no new row is added.
@@ -347,7 +360,7 @@ async def _run_collect_audit() -> None:
                 select(AuditEvent).where(AuditEvent.event_id == "evt-1")
             )
         ).scalar_one()
-    assert total_after == 2  # still two rows: updated, not inserted
+    assert total_after == 3  # still three rows: updated, not inserted
     assert e1_after.action == "DeleteItem"
     assert e1_after.item_name == "Renamed Item"
 

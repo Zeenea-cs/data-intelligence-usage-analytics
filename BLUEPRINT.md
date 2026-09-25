@@ -75,6 +75,7 @@ actian-companion/
       versions/
         001_initial_schema.py    # users, audit_events, items, collection_runs
         002_user_snapshots.py    # append-only user_snapshots history
+        003_audit_actor_id.py    # generated audit_events.actor_id
     tests/
       test_config.py  test_models.py  test_api_clients.py
       test_collectors.py  test_scheduler.py  test_items.py  test_webui.py
@@ -135,7 +136,7 @@ passwords), `METABASE_SITE_NAME`.
 ## 4. Data model (PostgreSQL)
 
 The ORM models are the single source of truth; the schema is applied via Alembic
-migrations (`001_initial_schema` → `002_user_snapshots`), run to `head` at startup
+migrations (`001_initial_schema` → `002_user_snapshots` → `003_audit_actor_id`), run to `head` at startup
 by `app.migrate.run_migrations` (it builds an Alembic `Config` pointing at the
 `migrations/` dir and the runtime `database_url`, escaping `%` → `%%`). The
 migrations must be kept in step with the models. JSONB columns in Postgres (use
@@ -158,7 +159,11 @@ consumption (stewards vs explorers) can be trended over time. Preserved across
 
 **audit_events**: `id BIGSERIAL PK`, `event_id VARCHAR UNIQUE`,
 `user_id VARCHAR FK->users.id`, `username`, `action`, `item_id`, `item_type`,
-`item_name`, `occurred_at`, `raw_payload JSONB`, `collected_at`.
+`item_name`, `occurred_at`, `raw_payload JSONB`, `collected_at`, and
+`actor_id VARCHAR` (migration `003`) — **generated** from `raw_payload`
+(`origin.id` when `origin.originType = 'User'`), indexed. `user_id` is left NULL
+for any actor absent from the latest user export (it is a FK), so activity
+statistics key on `actor_id`: it still attributes edits by users who have left.
 
 **items**: `id VARCHAR PK`, `key VARCHAR(512)`, `item_type`, `name`,
 `description TEXT`, `description_type VARCHAR(50)`, `owner_id`, `owner_name`,

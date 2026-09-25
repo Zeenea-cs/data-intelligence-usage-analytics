@@ -49,9 +49,9 @@ CARDS: list[dict[str, Any]] = [
         "name": "Top Contributors (last 30 days)",
         "display": "row",
         "sql": (
-            "SELECT COALESCE(username, user_id) AS contributor, "
+            "SELECT COALESCE(username, 'Former user ' || LEFT(actor_id, 8)) AS contributor, "
             "COUNT(*) AS edits FROM audit_events "
-            "WHERE user_id IS NOT NULL "
+            "WHERE actor_id IS NOT NULL "
             "AND occurred_at >= NOW() - INTERVAL '30 days' "
             "GROUP BY 1 ORDER BY edits DESC LIMIT 20"
         ),
@@ -70,7 +70,7 @@ CARDS: list[dict[str, Any]] = [
             "COUNT(*) AS modifications "
             "FROM audit_events ae "
             "LEFT JOIN items i ON i.id = ae.item_id "
-            "WHERE ae.user_id IS NOT NULL "
+            "WHERE ae.actor_id IS NOT NULL "
             "AND ae.occurred_at >= NOW() - INTERVAL '30 days' "
             "GROUP BY ae.item_id, i.name, ae.item_name, i.item_type "
             "ORDER BY modifications DESC LIMIT 20"
@@ -83,7 +83,7 @@ CARDS: list[dict[str, Any]] = [
         "display": "line",
         "sql": (
             "SELECT DATE_TRUNC('week', occurred_at) AS week, COUNT(*) AS events "
-            "FROM audit_events WHERE user_id IS NOT NULL "
+            "FROM audit_events WHERE actor_id IS NOT NULL "
             "GROUP BY week ORDER BY week"
         ),
         "viz": {"graph.dimensions": ["week"], "graph.metrics": ["events"]},
@@ -94,7 +94,7 @@ CARDS: list[dict[str, Any]] = [
         "display": "bar",
         "sql": (
             "SELECT action, COUNT(*) AS events FROM audit_events "
-            "WHERE user_id IS NOT NULL GROUP BY action ORDER BY events DESC"
+            "WHERE actor_id IS NOT NULL GROUP BY action ORDER BY events DESC"
         ),
         "viz": {"graph.dimensions": ["action"], "graph.metrics": ["events"]},
     },
@@ -104,7 +104,7 @@ CARDS: list[dict[str, Any]] = [
         "display": "line",
         "sql": (
             "SELECT DATE_TRUNC('day', occurred_at) AS day, COUNT(*) AS events "
-            "FROM audit_events WHERE user_id IS NOT NULL "
+            "FROM audit_events WHERE actor_id IS NOT NULL "
             "AND occurred_at >= NOW() - INTERVAL '30 days' "
             "GROUP BY day ORDER BY day"
         ),
@@ -143,26 +143,32 @@ CARDS: list[dict[str, Any]] = [
         "viz": {"graph.dimensions": ["permission_set"], "graph.metrics": ["users"]},
     },
     # --- "Most Active Users" report -------------------------------------- #
-    # Activity = number of audit events authored by a known user (audit
-    # user_id joined to users). Most/least active per rolling window; least
-    # active is ranked among users with >= 1 event in the window.
+    # Activity = number of audit events authored by a user (audit actor_id,
+    # which includes users who have since left). Most/least active per rolling
+    # window; least active is ranked among CURRENT users with >= 1 event in the
+    # window, since a former user is not a licence anyone can reclaim.
     *[
         {
             "key": f"mau_{rank}_{label}",
             "name": f"{'Most' if rank == 'top' else 'Least'} Active Users ({label})",
             "display": "row",
             "sql": (
-                "SELECT COALESCE(u.display_name, ae.username, ae.user_id) AS user_name, "
+                "SELECT COALESCE(u.display_name, ae.username, "
+                "'Former user ' || LEFT(ae.actor_id, 8)) AS user_name, "
                 "COUNT(*) AS events "
-                "FROM audit_events ae LEFT JOIN users u ON u.id = ae.user_id "
-                "WHERE ae.user_id IS NOT NULL "
+                "FROM audit_events ae LEFT JOIN users u ON u.id = ae.actor_id "
+                "WHERE ae.actor_id IS NOT NULL "
+                f"{current_only}"
                 f"AND ae.occurred_at >= NOW() - INTERVAL '{days} days' "
                 f"GROUP BY 1 ORDER BY events {direction}, user_name LIMIT 10"
             ),
             "viz": {"graph.dimensions": ["user_name"], "graph.metrics": ["events"]},
         }
         for label, days in (("last 7 days", 7), ("last 30 days", 30), ("last 365 days", 365))
-        for rank, direction in (("top", "DESC"), ("low", "ASC"))
+        for rank, direction, current_only in (
+            ("top", "DESC", ""),
+            ("low", "ASC", "AND u.id IS NOT NULL "),
+        )
     ],
     {
         # Comprehensive list of all users with their all-time activity (0 included).
@@ -173,7 +179,7 @@ CARDS: list[dict[str, Any]] = [
             "SELECT COALESCE(u.display_name, u.username) AS user_name, u.email, "
             "u.is_steward, COUNT(ae.event_id) AS total_events, "
             "MAX(ae.occurred_at) AS last_activity "
-            "FROM users u LEFT JOIN audit_events ae ON ae.user_id = u.id "
+            "FROM users u LEFT JOIN audit_events ae ON ae.actor_id = u.id "
             "GROUP BY u.id, u.display_name, u.username, u.email, u.is_steward "
             "ORDER BY total_events DESC"
         ),
@@ -234,7 +240,7 @@ CARDS: list[dict[str, Any]] = [
         "display": "row",
         "sql": (
             "SELECT COALESCE(item_name, item_id) AS item, COUNT(*) AS modifications "
-            "FROM audit_events WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
+            "FROM audit_events WHERE actor_id IS NOT NULL AND item_id IS NOT NULL "
             "GROUP BY item_id, item_name ORDER BY modifications DESC LIMIT 10"
         ),
         "viz": {"graph.dimensions": ["item"], "graph.metrics": ["modifications"]},
@@ -249,7 +255,7 @@ CARDS: list[dict[str, Any]] = [
             "COALESCE(i.item_type, '(unknown)') AS item_type, "
             "COUNT(*) AS modifications, MAX(ae.occurred_at) AS last_modified "
             "FROM audit_events ae LEFT JOIN items i ON i.id = ae.item_id "
-            "WHERE ae.user_id IS NOT NULL AND ae.item_id IS NOT NULL "
+            "WHERE ae.actor_id IS NOT NULL AND ae.item_id IS NOT NULL "
             "GROUP BY ae.item_id, i.name, ae.item_name, i.item_type "
             "ORDER BY modifications DESC LIMIT 25"
         ),
@@ -264,8 +270,8 @@ CARDS: list[dict[str, Any]] = [
         "display": "row",
         "sql": (
             "WITH edited AS ("
-            " SELECT DISTINCT user_id, item_id FROM audit_events "
-            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
+            " SELECT DISTINCT actor_id AS user_id, item_id FROM audit_events "
+            " WHERE actor_id IS NOT NULL AND item_id IS NOT NULL "
             " AND action = 'UpdateItem') "
             "SELECT COALESCE(i.owner_name, i.owner_email, i.owner_id) AS curator, "
             "ROUND(COUNT(e.item_id)::numeric / NULLIF(COUNT(*), 0), 3) AS coverage_ratio "
@@ -283,8 +289,8 @@ CARDS: list[dict[str, Any]] = [
         "display": "table",
         "sql": (
             "WITH edited AS ("
-            " SELECT DISTINCT user_id, item_id FROM audit_events "
-            " WHERE user_id IS NOT NULL AND item_id IS NOT NULL "
+            " SELECT DISTINCT actor_id AS user_id, item_id FROM audit_events "
+            " WHERE actor_id IS NOT NULL AND item_id IS NOT NULL "
             " AND action = 'UpdateItem') "
             "SELECT COALESCE(i.owner_name, i.owner_email, i.owner_id) AS curator, "
             "COUNT(*) AS managed_items, COUNT(e.item_id) AS edited_items, "

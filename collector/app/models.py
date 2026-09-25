@@ -18,6 +18,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Computed,
     ForeignKey,
     Integer,
     String,
@@ -37,6 +38,13 @@ _TZ = DateTime(timezone=True)
 
 # JSONB on PostgreSQL (production); plain JSON on SQLite (tests).
 _JSONB = JSON().with_variant(JSONB(), "postgresql")
+
+# The user behind an audit event, whether or not they are still a platform user.
+# Valid on both PostgreSQL and SQLite (3.38+), so tests build the same column.
+ACTOR_ID_SQL = (
+    "CASE WHEN raw_payload->'origin'->>'originType' = 'User' "
+    "THEN raw_payload->'origin'->>'id' END"
+)
 
 # BIGSERIAL/identity on PostgreSQL; INTEGER rowid (autoincrement) on SQLite, so
 # surrogate primary keys are generated under both.
@@ -100,6 +108,15 @@ class AuditEvent(Base):
     event_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     user_id: Mapped[str | None] = mapped_column(
         String(255), ForeignKey("users.id")
+    )
+    # user_id is only set for users present in the latest export (it is a foreign
+    # key), so a user who left before the first collection -- or before a Force
+    # reload -- had every edit dropped from the activity statistics. actor_id is
+    # derived from the payload instead, so it always names the user behind the
+    # event, current or former. Generated, so no collector writes it and existing
+    # rows are filled in by the migration.
+    actor_id: Mapped[str | None] = mapped_column(
+        String(255), Computed(ACTOR_ID_SQL, persisted=True), index=True
     )
     username: Mapped[str | None] = mapped_column(String(255))
     action: Mapped[str | None] = mapped_column(String(255))
